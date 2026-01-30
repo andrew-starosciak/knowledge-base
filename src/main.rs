@@ -1574,7 +1574,7 @@ fn cmd_locations(db: &Database) -> Result<()> {
 
 fn cmd_serve(db_path: PathBuf, port: u16) -> Result<()> {
     use axum::{
-        extract::{Query, State},
+        extract::{Path, Query, State},
         http::StatusCode,
         response::Json,
         routing::get,
@@ -1596,6 +1596,104 @@ fn cmd_serve(db_path: PathBuf, port: u16) -> Result<()> {
     struct MapQuery {
         era: Option<String>,
         topic: Option<String>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct ClaimsQuery {
+        video_id: Option<String>,
+        category: Option<String>,
+        limit: Option<usize>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct GraphQuery {
+        video_id: Option<String>,
+        moc_id: Option<i64>,
+    }
+
+    // Graph node/edge structures for vis.js
+    #[derive(serde::Serialize)]
+    struct GraphNode {
+        id: i64,
+        label: String,
+        title: String,      // Hover text
+        group: String,      // Category for coloring
+        value: usize,       // Node size (connection count)
+        video_id: String,
+        timestamp: Option<f64>,
+    }
+
+    #[derive(serde::Serialize)]
+    struct GraphEdge {
+        from: i64,
+        to: i64,
+        label: String,
+        arrows: String,
+        dashes: bool,       // Dashed for contradicts
+        color: EdgeColor,
+    }
+
+    #[derive(serde::Serialize)]
+    struct EdgeColor {
+        color: String,
+    }
+
+    #[derive(serde::Serialize)]
+    struct GraphData {
+        nodes: Vec<GraphNode>,
+        edges: Vec<GraphEdge>,
+    }
+
+    #[derive(serde::Serialize)]
+    struct MocSummary {
+        id: i64,
+        title: String,
+        description: Option<String>,
+        claim_count: usize,
+    }
+
+    #[derive(serde::Serialize)]
+    struct QuestionSummary {
+        id: i64,
+        question: String,
+        status: String,
+        evidence_count: usize,
+    }
+
+    #[derive(serde::Serialize)]
+    struct QueueSummary {
+        pending: usize,
+        in_progress: usize,
+        completed: usize,
+        failed: usize,
+        current: Option<String>,
+    }
+
+    #[derive(serde::Serialize)]
+    struct FullStats {
+        videos: i64,
+        claims: i64,
+        links: i64,
+        mocs: i64,
+        questions: i64,
+        active_questions: i64,
+        patterns: i64,
+        orphan_claims: usize,
+        stale_claims: usize,
+        framework: engine::FrameworkStats,
+        claims_by_category: Vec<CategoryCount>,
+    }
+
+    #[derive(serde::Serialize)]
+    struct CategoryCount {
+        category: String,
+        count: i64,
+    }
+
+    #[derive(serde::Serialize)]
+    struct VideoSummary {
+        id: String,
+        title: String,
     }
 
     async fn get_pins(
@@ -1625,6 +1723,260 @@ fn cmd_serve(db_path: PathBuf, port: u16) -> Result<()> {
         Ok(Json(topics))
     }
 
+    async fn get_videos(
+        State(state): State<Arc<AppState>>,
+    ) -> Result<Json<Vec<VideoSummary>>, StatusCode> {
+        let db = open_db(&state)?;
+        let videos = db.list_videos().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        Ok(Json(videos.into_iter().map(|v| VideoSummary {
+            id: v.id,
+            title: v.title,
+        }).collect()))
+    }
+
+    async fn get_claims(
+        State(state): State<Arc<AppState>>,
+        Query(q): Query<ClaimsQuery>,
+    ) -> Result<Json<Vec<engine::Claim>>, StatusCode> {
+        let db = open_db(&state)?;
+        let claims = if let Some(video_id) = q.video_id {
+            db.list_claims_for_video(&video_id).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        } else {
+            // Get all claims (limited)
+            db.get_random_claims(q.limit.unwrap_or(100)).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        };
+        Ok(Json(claims))
+    }
+
+    async fn get_claim(
+        State(state): State<Arc<AppState>>,
+        Path(id): Path<i64>,
+    ) -> Result<Json<engine::ClaimWithLinks>, StatusCode> {
+        let db = open_db(&state)?;
+        let claim = db.get_claim_with_links(id)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .ok_or(StatusCode::NOT_FOUND)?;
+        Ok(Json(claim))
+    }
+
+    async fn get_graph(
+        State(state): State<Arc<AppState>>,
+        Query(q): Query<GraphQuery>,
+    ) -> Result<Json<GraphData>, StatusCode> {
+        let db = open_db(&state)?;
+
+        // Get claims based on filter
+        let claims: Vec<engine::Claim> = if let Some(video_id) = q.video_id {
+            db.list_claims_for_video(&video_id).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        } else if let Some(moc_id) = q.moc_id {
+            let moc = db.get_moc_with_claims(moc_id)
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                .ok_or(StatusCode::NOT_FOUND)?;
+            moc.claims
+        } else {
+            // Default: get recent claims
+            db.get_random_claims(50).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        };
+
+        let claim_ids: std::collections::HashSet<i64> = claims.iter().map(|c| c.id).collect();
+
+        // Build nodes
+        let mut nodes = Vec::new();
+        for claim in &claims {
+            let link_count = db.get_claim_link_count(claim.id).unwrap_or(0);
+            let label = if claim.text.len() > 40 {
+                format!("{}...", &claim.text[..37])
+            } else {
+                claim.text.clone()
+            };
+            nodes.push(GraphNode {
+                id: claim.id,
+                label,
+                title: claim.text.clone(),
+                group: claim.category.as_str().to_string(),
+                value: (link_count + 1) as usize,
+                video_id: claim.video_id.clone(),
+                timestamp: claim.timestamp,
+            });
+        }
+
+        // Build edges
+        let mut edges = Vec::new();
+        for claim in &claims {
+            if let Ok(claim_with_links) = db.get_claim_with_links(claim.id) {
+                if let Some(cwl) = claim_with_links {
+                    for (link, _target) in &cwl.outgoing_links {
+                        // Only include edges where both nodes are in our set
+                        if claim_ids.contains(&link.target_claim_id) {
+                            let (color, dashes) = match link.link_type {
+                                engine::LinkType::Supports => ("#4CAF50", false),
+                                engine::LinkType::Contradicts => ("#f44336", true),
+                                engine::LinkType::Elaborates => ("#2196F3", false),
+                                engine::LinkType::Causes => ("#FF9800", false),
+                                engine::LinkType::CausedBy => ("#FF9800", false),
+                                engine::LinkType::Related => ("#9E9E9E", true),
+                            };
+                            edges.push(GraphEdge {
+                                from: link.source_claim_id,
+                                to: link.target_claim_id,
+                                label: link.link_type.as_str().to_string(),
+                                arrows: "to".to_string(),
+                                dashes,
+                                color: EdgeColor { color: color.to_string() },
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(Json(GraphData { nodes, edges }))
+    }
+
+    async fn get_mocs(
+        State(state): State<Arc<AppState>>,
+    ) -> Result<Json<Vec<MocSummary>>, StatusCode> {
+        let db = open_db(&state)?;
+        let mocs = db.list_mocs().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let mut summaries = Vec::new();
+        for moc in mocs {
+            let claim_count = db.get_moc_with_claims(moc.id)
+                .map(|m| m.map(|x| x.claims.len()).unwrap_or(0))
+                .unwrap_or(0);
+            summaries.push(MocSummary {
+                id: moc.id,
+                title: moc.title,
+                description: moc.description,
+                claim_count,
+            });
+        }
+        Ok(Json(summaries))
+    }
+
+    async fn get_moc(
+        State(state): State<Arc<AppState>>,
+        Path(id): Path<i64>,
+    ) -> Result<Json<engine::MocWithClaims>, StatusCode> {
+        let db = open_db(&state)?;
+        let moc = db.get_moc_with_claims(id)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .ok_or(StatusCode::NOT_FOUND)?;
+        Ok(Json(moc))
+    }
+
+    async fn get_questions(
+        State(state): State<Arc<AppState>>,
+    ) -> Result<Json<Vec<QuestionSummary>>, StatusCode> {
+        let db = open_db(&state)?;
+        let questions = db.list_research_questions(None)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let mut summaries = Vec::new();
+        for q in questions {
+            let evidence_count = db.get_question_with_evidence(q.id)
+                .map(|qe| qe.map(|x| x.claims.len() + x.videos.len()).unwrap_or(0))
+                .unwrap_or(0);
+            summaries.push(QuestionSummary {
+                id: q.id,
+                question: q.question,
+                status: q.status.as_str().to_string(),
+                evidence_count,
+            });
+        }
+        Ok(Json(summaries))
+    }
+
+    async fn get_question(
+        State(state): State<Arc<AppState>>,
+        Path(id): Path<i64>,
+    ) -> Result<Json<engine::QuestionWithEvidence>, StatusCode> {
+        let db = open_db(&state)?;
+        let question = db.get_question_with_evidence(id)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .ok_or(StatusCode::NOT_FOUND)?;
+        Ok(Json(question))
+    }
+
+    async fn get_stats(
+        State(state): State<Arc<AppState>>,
+    ) -> Result<Json<FullStats>, StatusCode> {
+        let db = open_db(&state)?;
+        let synthesis = db.get_synthesis_stats().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let framework = db.get_framework_stats().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        // Get counts
+        let videos = db.list_videos().map(|v| v.len() as i64).unwrap_or(0);
+        let claims = db.get_random_claims(10000).map(|c| c.len() as i64).unwrap_or(0);
+        let orphans = db.get_orphan_claims().map(|o| o.len()).unwrap_or(0);
+        let stale = db.get_stale_claims(30).map(|s| s.len()).unwrap_or(0);
+
+        // Count claims by category (simplified)
+        let claims_by_category = vec![
+            CategoryCount { category: "factual".to_string(), count: 0 },
+            CategoryCount { category: "causal".to_string(), count: 0 },
+            CategoryCount { category: "cyclical".to_string(), count: 0 },
+            CategoryCount { category: "memetic".to_string(), count: 0 },
+            CategoryCount { category: "geopolitical".to_string(), count: 0 },
+        ];
+
+        Ok(Json(FullStats {
+            videos,
+            claims,
+            links: 0, // Would need a query
+            mocs: synthesis.mocs,
+            questions: synthesis.research_questions,
+            active_questions: synthesis.active_questions,
+            patterns: synthesis.detected_patterns,
+            orphan_claims: orphans,
+            stale_claims: stale,
+            framework,
+            claims_by_category,
+        }))
+    }
+
+    async fn get_review_orphans(
+        State(state): State<Arc<AppState>>,
+    ) -> Result<Json<Vec<engine::Claim>>, StatusCode> {
+        let db = open_db(&state)?;
+        let orphans = db.get_orphan_claims().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        Ok(Json(orphans))
+    }
+
+    async fn get_review_stale(
+        State(state): State<Arc<AppState>>,
+    ) -> Result<Json<Vec<engine::Claim>>, StatusCode> {
+        let db = open_db(&state)?;
+        let stale = db.get_stale_claims(30).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        Ok(Json(stale))
+    }
+
+    async fn get_queue(
+        State(state): State<Arc<AppState>>,
+    ) -> Result<Json<QueueSummary>, StatusCode> {
+        let db = open_db(&state)?;
+        let items = db.get_queue(true).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        let mut pending = 0;
+        let mut in_progress = 0;
+        let mut completed = 0;
+        let mut failed = 0;
+        let mut current = None;
+
+        for item in items {
+            match item.status {
+                engine::ProcessingStatus::Pending => pending += 1,
+                engine::ProcessingStatus::InProgress => {
+                    in_progress += 1;
+                    current = Some(item.video_id.clone());
+                }
+                engine::ProcessingStatus::Completed => completed += 1,
+                engine::ProcessingStatus::Failed => failed += 1,
+                engine::ProcessingStatus::Skipped => {}
+            }
+        }
+
+        Ok(Json(QueueSummary { pending, in_progress, completed, failed, current }))
+    }
+
     async fn get_index() -> axum::response::Html<&'static str> {
         axum::response::Html(include_str!("../static/index.html"))
     }
@@ -1636,11 +1988,23 @@ fn cmd_serve(db_path: PathBuf, port: u16) -> Result<()> {
         .route("/api/pins", get(get_pins))
         .route("/api/eras", get(get_eras))
         .route("/api/topics", get(get_topics))
+        .route("/api/videos", get(get_videos))
+        .route("/api/claims", get(get_claims))
+        .route("/api/claims/:id", get(get_claim))
+        .route("/api/graph", get(get_graph))
+        .route("/api/mocs", get(get_mocs))
+        .route("/api/mocs/:id", get(get_moc))
+        .route("/api/questions", get(get_questions))
+        .route("/api/questions/:id", get(get_question))
+        .route("/api/stats", get(get_stats))
+        .route("/api/review/orphans", get(get_review_orphans))
+        .route("/api/review/stale", get(get_review_stale))
+        .route("/api/queue", get(get_queue))
         .layer(CorsLayer::permissive())
         .with_state(state);
 
     println!("Starting server at http://localhost:{}", port);
-    println!("Open in your browser to view the map.");
+    println!("Open in your browser to view the knowledge base.");
 
     tokio::runtime::Runtime::new()?
         .block_on(async {

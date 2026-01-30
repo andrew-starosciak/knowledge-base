@@ -3,15 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Knowledge Map</title>
+    <title>Knowledge Base</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             display: flex;
@@ -21,21 +18,190 @@
             color: #eee;
         }
         header {
-            padding: 12px 20px;
+            padding: 10px 20px;
             background: #16213e;
-            display: flex;
-            gap: 20px;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-        header h1 {
-            font-size: 1.2rem;
-            font-weight: 500;
-        }
-        .filters {
             display: flex;
             gap: 15px;
             align-items: center;
+            border-bottom: 1px solid #333;
+        }
+        header h1 { font-size: 1.1rem; font-weight: 500; }
+        .header-right {
+            margin-left: auto;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .queue-badge {
+            background: #4a69bd;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            cursor: pointer;
+        }
+        .queue-badge:hover { background: #3c5aa6; }
+
+        .main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 280px;
+            background: #16213e;
+            border-right: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .sidebar-section {
+            border-bottom: 1px solid #333;
+        }
+        .sidebar-header {
+            padding: 10px 15px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #aaa;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+        }
+        .sidebar-header:hover { background: #1a1a3e; }
+        .sidebar-content {
+            padding: 0 10px 10px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .sidebar-item {
+            padding: 6px 10px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .sidebar-item:hover { background: #1a1a3e; }
+        .sidebar-item.active { background: #4a69bd; }
+        .item-count {
+            color: #888;
+            font-size: 0.75rem;
+        }
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 6px;
+        }
+        .status-active { background: #4CAF50; }
+        .status-answered { background: #9E9E9E; }
+        .status-parked { background: #FF9800; }
+
+        /* Main View */
+        .main-view {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .view-tabs {
+            display: flex;
+            background: #0f0f23;
+            border-bottom: 1px solid #333;
+        }
+        .view-tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            font-size: 0.9rem;
+        }
+        .view-tab:hover { background: #1a1a2e; }
+        .view-tab.active {
+            border-bottom-color: #4a69bd;
+            color: #fff;
+        }
+        .view-content {
+            flex: 1;
+            position: relative;
+        }
+        .view-panel {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            display: none;
+        }
+        .view-panel.active { display: block; }
+
+        #map { height: 100%; }
+        #graph { height: 100%; background: #0f0f23; }
+
+        /* Stats Dashboard */
+        #stats-panel {
+            padding: 20px;
+            overflow-y: auto;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: #16213e;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 600;
+            color: #4a69bd;
+        }
+        .stat-label {
+            font-size: 0.85rem;
+            color: #888;
+        }
+
+        /* Review Panel */
+        #review-panel {
+            padding: 20px;
+            overflow-y: auto;
+        }
+        .review-section {
+            margin-bottom: 20px;
+        }
+        .review-section h3 {
+            font-size: 0.95rem;
+            margin-bottom: 10px;
+            color: #aaa;
+        }
+        .claim-card {
+            background: #16213e;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            cursor: pointer;
+        }
+        .claim-card:hover { background: #1a1a3e; }
+        .claim-text {
+            font-size: 0.9rem;
+            margin-bottom: 6px;
+        }
+        .claim-meta {
+            font-size: 0.75rem;
+            color: #888;
+        }
+
+        /* Bottom bar */
+        .bottom-bar {
+            padding: 10px 20px;
+            background: #16213e;
+            border-top: 1px solid #333;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
         }
         .filter-group {
             display: flex;
@@ -43,74 +209,90 @@
             gap: 8px;
         }
         .filter-group label {
-            font-size: 0.85rem;
-            color: #aaa;
+            font-size: 0.8rem;
+            color: #888;
         }
         select {
-            padding: 6px 12px;
+            padding: 5px 10px;
             border-radius: 4px;
             border: 1px solid #333;
             background: #0f0f23;
             color: #eee;
-            font-size: 0.9rem;
-        }
-        #map {
-            flex: 1;
-        }
-        .timeline {
-            padding: 15px 20px;
-            background: #16213e;
-        }
-        .timeline-track {
-            display: flex;
-            align-items: center;
-            gap: 10px;
+            font-size: 0.85rem;
         }
         .era-buttons {
             display: flex;
-            gap: 5px;
+            gap: 4px;
             flex-wrap: wrap;
         }
         .era-btn {
-            padding: 6px 12px;
+            padding: 5px 10px;
             border: 1px solid #333;
             background: #0f0f23;
             color: #aaa;
             border-radius: 4px;
             cursor: pointer;
+            font-size: 0.75rem;
+        }
+        .era-btn:hover { background: #1a1a3e; color: #fff; }
+        .era-btn.active { background: #4a69bd; color: #fff; border-color: #4a69bd; }
+
+        /* Detail panel (slide-in) */
+        .detail-panel {
+            position: absolute;
+            top: 0; right: -400px;
+            width: 400px;
+            height: 100%;
+            background: #16213e;
+            border-left: 1px solid #333;
+            transition: right 0.3s;
+            overflow-y: auto;
+            z-index: 1000;
+        }
+        .detail-panel.open { right: 0; }
+        .detail-header {
+            padding: 15px;
+            border-bottom: 1px solid #333;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .detail-close {
+            cursor: pointer;
+            font-size: 1.2rem;
+        }
+        .detail-content { padding: 15px; }
+        .detail-section {
+            margin-bottom: 15px;
+        }
+        .detail-section h4 {
             font-size: 0.8rem;
-            transition: all 0.2s;
-        }
-        .era-btn:hover {
-            background: #1a1a3e;
-            color: #fff;
-        }
-        .era-btn.active {
-            background: #4a69bd;
-            color: #fff;
-            border-color: #4a69bd;
-        }
-        .pin-count {
-            margin-left: auto;
-            font-size: 0.85rem;
             color: #888;
+            margin-bottom: 6px;
         }
-        .leaflet-popup-content {
-            color: #333;
-        }
-        .popup-title {
-            font-weight: 600;
-            margin-bottom: 5px;
-        }
-        .popup-meta {
+        .link-item {
+            padding: 8px;
+            background: #0f0f23;
+            border-radius: 4px;
+            margin-bottom: 6px;
             font-size: 0.85rem;
-            color: #666;
-            margin-bottom: 8px;
         }
-        .popup-note {
-            font-style: italic;
-            margin-bottom: 8px;
+        .link-type {
+            font-size: 0.7rem;
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin-right: 6px;
         }
+        .link-supports { background: #4CAF50; }
+        .link-contradicts { background: #f44336; }
+        .link-causes { background: #FF9800; }
+        .link-elaborates { background: #2196F3; }
+        .link-related { background: #9E9E9E; }
+
+        /* Leaflet popup customization */
+        .leaflet-popup-content { color: #333; }
+        .popup-title { font-weight: 600; margin-bottom: 5px; }
+        .popup-meta { font-size: 0.85rem; color: #666; margin-bottom: 8px; }
         .popup-link {
             display: inline-block;
             padding: 4px 8px;
@@ -120,48 +302,237 @@
             border-radius: 3px;
             font-size: 0.85rem;
         }
-        .popup-link:hover {
-            background: #3c5aa6;
-        }
     </style>
 </head>
 <body>
     <header>
-        <h1>Knowledge Map</h1>
-        <div class="filters">
-            <div class="filter-group">
-                <label>Topic:</label>
-                <select id="topic-select">
-                    <option value="">All Topics</option>
-                </select>
-            </div>
+        <h1>Knowledge Base</h1>
+        <div class="header-right">
+            <span id="claim-count">0 claims</span>
+            <span class="queue-badge" id="queue-badge" onclick="showQueueStatus()">Queue: 0</span>
         </div>
-        <span class="pin-count" id="pin-count">0 locations</span>
     </header>
 
-    <div id="map"></div>
+    <div class="main-container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-section">
+                <div class="sidebar-header" onclick="toggleSection(this)">
+                    <span>Maps of Content</span>
+                    <span id="moc-count">0</span>
+                </div>
+                <div class="sidebar-content" id="moc-list"></div>
+            </div>
 
-    <div class="timeline">
-        <div class="timeline-track">
-            <div class="era-buttons" id="era-buttons">
-                <button class="era-btn active" data-era="">All Eras</button>
+            <div class="sidebar-section">
+                <div class="sidebar-header" onclick="toggleSection(this)">
+                    <span>Research Questions</span>
+                    <span id="question-count">0</span>
+                </div>
+                <div class="sidebar-content" id="question-list"></div>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-header" onclick="toggleSection(this)">
+                    <span>Review Queue</span>
+                    <span id="review-count">0</span>
+                </div>
+                <div class="sidebar-content" id="review-summary"></div>
+            </div>
+
+            <div class="sidebar-section" style="flex: 1;">
+                <div class="sidebar-header" onclick="toggleSection(this)">
+                    <span>Videos</span>
+                    <span id="video-count">0</span>
+                </div>
+                <div class="sidebar-content" id="video-list" style="max-height: none;"></div>
+            </div>
+        </div>
+
+        <!-- Main View -->
+        <div class="main-view">
+            <div class="view-tabs">
+                <div class="view-tab active" data-view="graph">Knowledge Graph</div>
+                <div class="view-tab" data-view="map">Map</div>
+                <div class="view-tab" data-view="stats">Statistics</div>
+                <div class="view-tab" data-view="review">Review</div>
+            </div>
+
+            <div class="view-content">
+                <div class="view-panel active" id="graph-panel">
+                    <div id="graph"></div>
+                </div>
+
+                <div class="view-panel" id="map-panel">
+                    <div id="map"></div>
+                </div>
+
+                <div class="view-panel" id="stats-panel">
+                    <h2 style="margin-bottom: 20px;">Knowledge Base Statistics</h2>
+                    <div class="stats-grid" id="stats-grid"></div>
+                </div>
+
+                <div class="view-panel" id="review-panel">
+                    <div class="review-section">
+                        <h3>Orphan Claims (need more links)</h3>
+                        <div id="orphan-list"></div>
+                    </div>
+                    <div class="review-section">
+                        <h3>Stale Claims (not accessed in 30+ days)</h3>
+                        <div id="stale-list"></div>
+                    </div>
+                </div>
+
+                <!-- Detail Panel -->
+                <div class="detail-panel" id="detail-panel">
+                    <div class="detail-header">
+                        <span>Claim Details</span>
+                        <span class="detail-close" onclick="closeDetail()">&times;</span>
+                    </div>
+                    <div class="detail-content" id="detail-content"></div>
+                </div>
             </div>
         </div>
     </div>
 
+    <div class="bottom-bar">
+        <div class="filter-group">
+            <label>Video:</label>
+            <select id="video-filter" onchange="applyFilters()">
+                <option value="">All Videos</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <label>MOC:</label>
+            <select id="moc-filter" onchange="applyFilters()">
+                <option value="">All MOCs</option>
+            </select>
+        </div>
+        <div class="era-buttons" id="era-buttons">
+            <button class="era-btn active" data-era="">All Eras</button>
+        </div>
+    </div>
+
     <script>
-        // Initialize map
-        const map = L.map('map').setView([30, 35], 3);
-
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; OpenStreetMap contributors'
-        }).addTo(map);
-
-        let markers = L.layerGroup().addTo(map);
+        // State
+        let network = null;
+        let map = null;
+        let markers = null;
+        let currentView = 'graph';
+        let currentVideoFilter = '';
+        let currentMocFilter = '';
         let currentEra = '';
-        let currentTopic = '';
 
-        // Load eras
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadAll();
+            initGraph();
+            initMap();
+            setupTabs();
+        });
+
+        async function loadAll() {
+            await Promise.all([
+                loadMocs(),
+                loadQuestions(),
+                loadVideos(),
+                loadEras(),
+                loadStats(),
+                loadQueue(),
+                loadReviewSummary()
+            ]);
+        }
+
+        // Tab switching
+        function setupTabs() {
+            document.querySelectorAll('.view-tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    document.querySelectorAll('.view-tab').forEach(t => t.classList.remove('active'));
+                    document.querySelectorAll('.view-panel').forEach(p => p.classList.remove('active'));
+                    tab.classList.add('active');
+                    const view = tab.dataset.view;
+                    document.getElementById(view + '-panel').classList.add('active');
+                    currentView = view;
+
+                    if (view === 'map' && map) {
+                        setTimeout(() => map.invalidateSize(), 100);
+                    }
+                    if (view === 'review') {
+                        loadReviewPanel();
+                    }
+                });
+            });
+        }
+
+        // Sidebar toggle
+        function toggleSection(header) {
+            const content = header.nextElementSibling;
+            content.style.display = content.style.display === 'none' ? 'block' : 'none';
+        }
+
+        // Load MOCs
+        async function loadMocs() {
+            const res = await fetch('/api/mocs');
+            const mocs = await res.json();
+            document.getElementById('moc-count').textContent = mocs.length;
+
+            const list = document.getElementById('moc-list');
+            const select = document.getElementById('moc-filter');
+            list.innerHTML = '';
+
+            mocs.forEach(moc => {
+                list.innerHTML += `
+                    <div class="sidebar-item" onclick="filterByMoc(${moc.id})">
+                        <span>${moc.title}</span>
+                        <span class="item-count">${moc.claim_count}</span>
+                    </div>
+                `;
+                select.innerHTML += `<option value="${moc.id}">${moc.title}</option>`;
+            });
+        }
+
+        // Load Questions
+        async function loadQuestions() {
+            const res = await fetch('/api/questions');
+            const questions = await res.json();
+            document.getElementById('question-count').textContent = questions.length;
+
+            const list = document.getElementById('question-list');
+            list.innerHTML = '';
+
+            questions.forEach(q => {
+                const statusClass = 'status-' + q.status;
+                list.innerHTML += `
+                    <div class="sidebar-item" onclick="showQuestion(${q.id})">
+                        <span><span class="status-dot ${statusClass}"></span>${q.question.substring(0, 30)}...</span>
+                        <span class="item-count">${q.evidence_count}</span>
+                    </div>
+                `;
+            });
+        }
+
+        // Load Videos
+        async function loadVideos() {
+            const res = await fetch('/api/videos');
+            const videos = await res.json();
+            document.getElementById('video-count').textContent = videos.length;
+
+            const list = document.getElementById('video-list');
+            const select = document.getElementById('video-filter');
+            list.innerHTML = '';
+
+            videos.forEach(v => {
+                const title = v.title.length > 35 ? v.title.substring(0, 32) + '...' : v.title;
+                list.innerHTML += `
+                    <div class="sidebar-item" onclick="filterByVideo('${v.id}')">
+                        <span>${title}</span>
+                    </div>
+                `;
+                select.innerHTML += `<option value="${v.id}">${title}</option>`;
+            });
+        }
+
+        // Load Eras
         async function loadEras() {
             const res = await fetch('/api/eras');
             const eras = await res.json();
@@ -177,21 +548,296 @@
             });
         }
 
-        // Load topics
-        async function loadTopics() {
-            const res = await fetch('/api/topics');
-            const topics = await res.json();
-            const select = document.getElementById('topic-select');
+        // Load Stats
+        async function loadStats() {
+            const res = await fetch('/api/stats');
+            const stats = await res.json();
 
-            topics.forEach(topic => {
-                const opt = document.createElement('option');
-                opt.value = topic.name;
-                opt.textContent = topic.name;
-                select.appendChild(opt);
+            document.getElementById('claim-count').textContent = stats.claims + ' claims';
+
+            const grid = document.getElementById('stats-grid');
+            grid.innerHTML = `
+                <div class="stat-card">
+                    <div class="stat-value">${stats.videos}</div>
+                    <div class="stat-label">Videos</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.claims}</div>
+                    <div class="stat-label">Claims</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.mocs}</div>
+                    <div class="stat-label">Maps of Content</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.questions}</div>
+                    <div class="stat-label">Research Questions</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.active_questions}</div>
+                    <div class="stat-label">Active Questions</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.patterns}</div>
+                    <div class="stat-label">Detected Patterns</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.orphan_claims}</div>
+                    <div class="stat-label">Orphan Claims</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.stale_claims}</div>
+                    <div class="stat-label">Stale Claims</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.framework.cyclical_indicators}</div>
+                    <div class="stat-label">Cyclical Indicators</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.framework.causal_relations}</div>
+                    <div class="stat-label">Causal Relations</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.framework.idea_transmissions}</div>
+                    <div class="stat-label">Idea Transmissions</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.framework.geopolitical_entities}</div>
+                    <div class="stat-label">Geopolitical Entities</div>
+                </div>
+            `;
+        }
+
+        // Load Queue
+        async function loadQueue() {
+            const res = await fetch('/api/queue');
+            const queue = await res.json();
+            const badge = document.getElementById('queue-badge');
+            const total = queue.pending + queue.in_progress;
+            badge.textContent = `Queue: ${total}`;
+            if (queue.in_progress > 0) {
+                badge.style.background = '#4CAF50';
+            }
+        }
+
+        // Load Review Summary
+        async function loadReviewSummary() {
+            const [orphansRes, staleRes] = await Promise.all([
+                fetch('/api/review/orphans'),
+                fetch('/api/review/stale')
+            ]);
+            const orphans = await orphansRes.json();
+            const stale = await staleRes.json();
+
+            document.getElementById('review-count').textContent = orphans.length + stale.length;
+            document.getElementById('review-summary').innerHTML = `
+                <div class="sidebar-item" onclick="switchToReview()">
+                    <span>Orphans</span><span class="item-count">${orphans.length}</span>
+                </div>
+                <div class="sidebar-item" onclick="switchToReview()">
+                    <span>Stale</span><span class="item-count">${stale.length}</span>
+                </div>
+            `;
+        }
+
+        // Load Review Panel
+        async function loadReviewPanel() {
+            const [orphansRes, staleRes] = await Promise.all([
+                fetch('/api/review/orphans'),
+                fetch('/api/review/stale')
+            ]);
+            const orphans = await orphansRes.json();
+            const stale = await staleRes.json();
+
+            document.getElementById('orphan-list').innerHTML = orphans.slice(0, 20).map(c => `
+                <div class="claim-card" onclick="showClaim(${c.id})">
+                    <div class="claim-text">${c.text}</div>
+                    <div class="claim-meta">${c.category} | ${c.video_id}</div>
+                </div>
+            `).join('');
+
+            document.getElementById('stale-list').innerHTML = stale.slice(0, 20).map(c => `
+                <div class="claim-card" onclick="showClaim(${c.id})">
+                    <div class="claim-text">${c.text}</div>
+                    <div class="claim-meta">${c.category} | ${c.video_id}</div>
+                </div>
+            `).join('');
+        }
+
+        function switchToReview() {
+            document.querySelector('[data-view="review"]').click();
+        }
+
+        // Initialize Graph
+        function initGraph() {
+            loadGraph();
+        }
+
+        async function loadGraph() {
+            let url = '/api/graph?';
+            if (currentVideoFilter) url += `video_id=${currentVideoFilter}&`;
+            if (currentMocFilter) url += `moc_id=${currentMocFilter}&`;
+
+            const res = await fetch(url);
+            const data = await res.json();
+
+            const container = document.getElementById('graph');
+
+            const options = {
+                nodes: {
+                    shape: 'dot',
+                    scaling: { min: 10, max: 30 },
+                    font: { color: '#eee', size: 12 }
+                },
+                edges: {
+                    width: 1,
+                    smooth: { type: 'continuous' }
+                },
+                groups: {
+                    factual: { color: { background: '#2196F3', border: '#1976D2' } },
+                    causal: { color: { background: '#FF9800', border: '#F57C00' } },
+                    cyclical: { color: { background: '#9C27B0', border: '#7B1FA2' } },
+                    memetic: { color: { background: '#4CAF50', border: '#388E3C' } },
+                    geopolitical: { color: { background: '#f44336', border: '#D32F2F' } }
+                },
+                physics: {
+                    stabilization: { iterations: 100 },
+                    barnesHut: { gravitationalConstant: -2000 }
+                },
+                interaction: {
+                    hover: true,
+                    tooltipDelay: 200
+                }
+            };
+
+            network = new vis.Network(container, data, options);
+
+            network.on('click', function(params) {
+                if (params.nodes.length > 0) {
+                    showClaim(params.nodes[0]);
+                }
             });
         }
 
-        // Select era
+        // Initialize Map
+        function initMap() {
+            map = L.map('map').setView([30, 35], 3);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap'
+            }).addTo(map);
+            markers = L.layerGroup().addTo(map);
+            loadPins();
+        }
+
+        async function loadPins() {
+            let url = '/api/pins?';
+            if (currentEra) url += `era=${encodeURIComponent(currentEra)}&`;
+
+            const res = await fetch(url);
+            const pins = await res.json();
+
+            markers.clearLayers();
+
+            pins.forEach(pin => {
+                const marker = L.marker([pin.location.lat, pin.location.lon]);
+                let popup = `<div class="popup-title">${pin.location.name}</div>`;
+                popup += `<div class="popup-meta">${pin.video_title}</div>`;
+                if (pin.era) popup += `<div class="popup-meta">Era: ${pin.era}</div>`;
+                popup += `<a href="https://youtube.com/watch?v=${pin.video_id}" target="_blank" class="popup-link">Watch</a>`;
+                marker.bindPopup(popup);
+                markers.addLayer(marker);
+            });
+        }
+
+        // Show Claim Details
+        async function showClaim(id) {
+            const res = await fetch(`/api/claims/${id}`);
+            const data = await res.json();
+
+            const panel = document.getElementById('detail-panel');
+            const content = document.getElementById('detail-content');
+
+            let linksHtml = '';
+
+            if (data.outgoing_links.length > 0) {
+                linksHtml += '<div class="detail-section"><h4>Outgoing Links</h4>';
+                data.outgoing_links.forEach(([link, target]) => {
+                    linksHtml += `
+                        <div class="link-item" onclick="showClaim(${target.id})">
+                            <span class="link-type link-${link.link_type}">${link.link_type}</span>
+                            ${target.text.substring(0, 50)}...
+                        </div>
+                    `;
+                });
+                linksHtml += '</div>';
+            }
+
+            if (data.incoming_links.length > 0) {
+                linksHtml += '<div class="detail-section"><h4>Incoming Links</h4>';
+                data.incoming_links.forEach(([link, source]) => {
+                    linksHtml += `
+                        <div class="link-item" onclick="showClaim(${source.id})">
+                            <span class="link-type link-${link.link_type}">${link.link_type}</span>
+                            ${source.text.substring(0, 50)}...
+                        </div>
+                    `;
+                });
+                linksHtml += '</div>';
+            }
+
+            content.innerHTML = `
+                <div class="detail-section">
+                    <h4>Claim</h4>
+                    <p>${data.claim.text}</p>
+                </div>
+                <div class="detail-section">
+                    <h4>Source</h4>
+                    <p style="font-style: italic;">"${data.claim.source_quote}"</p>
+                </div>
+                <div class="detail-section">
+                    <h4>Metadata</h4>
+                    <p>Category: ${data.claim.category}<br>
+                    Confidence: ${data.claim.confidence}<br>
+                    Video: ${data.claim.video_id}<br>
+                    ${data.claim.timestamp ? 'Timestamp: ' + Math.floor(data.claim.timestamp) + 's' : ''}</p>
+                </div>
+                ${linksHtml}
+                <div class="detail-section">
+                    <a href="https://youtube.com/watch?v=${data.claim.video_id}${data.claim.timestamp ? '&t=' + Math.floor(data.claim.timestamp) : ''}"
+                       target="_blank" class="popup-link">Watch Video</a>
+                </div>
+            `;
+
+            panel.classList.add('open');
+        }
+
+        function closeDetail() {
+            document.getElementById('detail-panel').classList.remove('open');
+        }
+
+        // Filters
+        function filterByVideo(videoId) {
+            currentVideoFilter = videoId;
+            currentMocFilter = '';
+            document.getElementById('video-filter').value = videoId;
+            document.getElementById('moc-filter').value = '';
+            loadGraph();
+        }
+
+        function filterByMoc(mocId) {
+            currentMocFilter = mocId;
+            currentVideoFilter = '';
+            document.getElementById('moc-filter').value = mocId;
+            document.getElementById('video-filter').value = '';
+            loadGraph();
+        }
+
+        function applyFilters() {
+            currentVideoFilter = document.getElementById('video-filter').value;
+            currentMocFilter = document.getElementById('moc-filter').value;
+            loadGraph();
+        }
+
         function selectEra(era) {
             currentEra = era;
             document.querySelectorAll('.era-btn').forEach(btn => {
@@ -200,76 +846,16 @@
             loadPins();
         }
 
-        // Load pins
-        async function loadPins() {
-            let url = '/api/pins?';
-            if (currentEra) url += `era=${encodeURIComponent(currentEra)}&`;
-            if (currentTopic) url += `topic=${encodeURIComponent(currentTopic)}&`;
-
-            const res = await fetch(url);
-            const pins = await res.json();
-
-            markers.clearLayers();
-
-            // Group pins by location
-            const grouped = {};
-            pins.forEach(pin => {
-                const key = `${pin.location.lat},${pin.location.lon}`;
-                if (!grouped[key]) {
-                    grouped[key] = {
-                        location: pin.location,
-                        pins: []
-                    };
-                }
-                grouped[key].pins.push(pin);
-            });
-
-            Object.values(grouped).forEach(group => {
-                const loc = group.location;
-                const marker = L.marker([loc.lat, loc.lon]);
-
-                let popupContent = `<div class="popup-title">${loc.name}</div>`;
-
-                group.pins.forEach(pin => {
-                    popupContent += `<div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #eee;">`;
-                    popupContent += `<div class="popup-meta">`;
-                    popupContent += `<strong>${pin.video_title}</strong><br>`;
-                    if (pin.era) popupContent += `Era: ${pin.era}<br>`;
-                    if (pin.topic) popupContent += `Topic: ${pin.topic}`;
-                    popupContent += `</div>`;
-
-                    if (pin.note) {
-                        popupContent += `<div class="popup-note">"${pin.note}"</div>`;
-                    }
-
-                    let videoUrl = `https://www.youtube.com/watch?v=${pin.video_id}`;
-                    if (pin.timestamp) {
-                        videoUrl += `&t=${Math.floor(pin.timestamp)}s`;
-                    }
-                    popupContent += `<a href="${videoUrl}" target="_blank" class="popup-link">Watch Video</a>`;
-                    popupContent += `</div>`;
-                });
-
-                marker.bindPopup(popupContent);
-                markers.addLayer(marker);
-            });
-
-            document.getElementById('pin-count').textContent =
-                `${pins.length} location${pins.length !== 1 ? 's' : ''}`;
+        function showQueueStatus() {
+            alert('AI Processing Queue - Check terminal for details');
         }
 
-        // Event listeners
-        document.getElementById('topic-select').addEventListener('change', (e) => {
-            currentTopic = e.target.value;
-            loadPins();
-        });
-
-        document.querySelector('.era-btn').onclick = () => selectEra('');
-
-        // Initial load
-        loadEras();
-        loadTopics();
-        loadPins();
+        async function showQuestion(id) {
+            const res = await fetch(`/api/questions/${id}`);
+            const data = await res.json();
+            // Could open a modal or detail panel
+            alert(`Question: ${data.question.question}\nStatus: ${data.question.status}\nEvidence: ${data.claims.length} claims, ${data.videos.length} videos`);
+        }
     </script>
 </body>
 </html>

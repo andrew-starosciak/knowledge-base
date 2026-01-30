@@ -21,6 +21,9 @@ enum Commands {
     Fetch {
         /// YouTube URL or video ID
         url: String,
+        /// Don't add to AI processing queue
+        #[arg(long)]
+        no_queue: bool,
     },
     /// List all stored videos
     List,
@@ -735,6 +738,70 @@ enum Commands {
     },
     /// Show synthesis statistics
     SynthesisStats,
+
+    // Phase 10: AI Processing Queue
+
+    /// Show AI processing queue
+    Queue {
+        /// Show all items including completed
+        #[arg(short, long)]
+        all: bool,
+    },
+    /// Add a video to the processing queue
+    QueueAdd {
+        /// Video ID
+        video_id: String,
+        /// Priority (higher = process first)
+        #[arg(short, long, default_value = "0")]
+        priority: i32,
+    },
+    /// Skip a video (won't be processed)
+    QueueSkip {
+        /// Video ID
+        video_id: String,
+    },
+    /// Reset a failed/skipped video to pending
+    QueueReset {
+        /// Video ID
+        video_id: String,
+    },
+    /// Mark a video as in-progress
+    QueueStart {
+        /// Video ID
+        video_id: String,
+    },
+    /// Mark a video as completed
+    QueueComplete {
+        /// Video ID
+        video_id: String,
+        /// Number of claims extracted
+        #[arg(short, long)]
+        claims: i32,
+    },
+    /// Mark a video as failed
+    QueueFail {
+        /// Video ID
+        video_id: String,
+        /// Error message
+        #[arg(short, long)]
+        reason: String,
+    },
+    /// Clear completed or failed items from queue
+    QueueClear {
+        /// Clear completed items
+        #[arg(long)]
+        completed: bool,
+        /// Clear failed items
+        #[arg(long)]
+        failed: bool,
+    },
+    /// Export transcript as plain text for AI processing
+    ExportTranscript {
+        /// Video ID
+        video_id: String,
+    },
+    /// Export pending video IDs from queue
+    ExportQueue,
 }
 
 fn main() -> Result<()> {
@@ -742,7 +809,7 @@ fn main() -> Result<()> {
     let db = Database::open(&cli.database)?;
 
     match cli.command {
-        Commands::Fetch { url } => cmd_fetch(&db, &url),
+        Commands::Fetch { url, no_queue } => cmd_fetch(&db, &url, no_queue),
         Commands::List => cmd_list(&db),
         Commands::Show { id, full } => cmd_show(&db, &id, full),
         Commands::Search { query, era, region, topic } => {
@@ -879,10 +946,22 @@ fn main() -> Result<()> {
         Commands::DeletePattern { id } => cmd_delete_pattern(&db, id),
         Commands::Review { stale, orphans, random } => cmd_review(&db, stale, orphans, random),
         Commands::SynthesisStats => cmd_synthesis_stats(&db),
+
+        // Phase 10: AI Processing Queue
+        Commands::Queue { all } => cmd_queue(&db, all),
+        Commands::QueueAdd { video_id, priority } => cmd_queue_add(&db, &video_id, priority),
+        Commands::QueueSkip { video_id } => cmd_queue_skip(&db, &video_id),
+        Commands::QueueReset { video_id } => cmd_queue_reset(&db, &video_id),
+        Commands::QueueStart { video_id } => cmd_queue_start(&db, &video_id),
+        Commands::QueueComplete { video_id, claims } => cmd_queue_complete(&db, &video_id, claims),
+        Commands::QueueFail { video_id, reason } => cmd_queue_fail(&db, &video_id, &reason),
+        Commands::QueueClear { completed, failed } => cmd_queue_clear(&db, completed, failed),
+        Commands::ExportTranscript { video_id } => cmd_export_transcript(&db, &video_id),
+        Commands::ExportQueue => cmd_export_queue(&db),
     }
 }
 
-fn cmd_fetch(db: &Database, url: &str) -> Result<()> {
+fn cmd_fetch(db: &Database, url: &str, no_queue: bool) -> Result<()> {
     println!("Fetching: {}", url);
 
     let fetcher = Fetcher::new();
@@ -898,6 +977,12 @@ fn cmd_fetch(db: &Database, url: &str) -> Result<()> {
     if let Some(ref t) = transcript {
         db.insert_transcript(t)?;
         println!("Transcript: {} segments, {} chars", t.segments.len(), t.full_text.len());
+
+        // Add to AI processing queue unless --no-queue is set
+        if !no_queue {
+            db.add_to_queue(&video.id, 0)?;
+            println!("Added to AI processing queue");
+        }
     } else {
         println!("Transcript: not available");
     }
@@ -4044,6 +4129,158 @@ fn cmd_synthesis_stats(db: &Database) -> Result<()> {
     println!("\nReview Queue:");
     println!("{:<30} {:>10}", "  Stale Claims (30+ days)", stats.stale_claims);
     println!("{:<30} {:>10}", "  Orphan Claims (<2 links)", stats.orphan_claims);
+
+    Ok(())
+}
+
+// Phase 10: AI Processing Queue Commands
+
+fn cmd_queue(db: &Database, show_all: bool) -> Result<()> {
+    let items = db.get_queue(show_all)?;
+
+    if items.is_empty() {
+        println!("AI processing queue is empty.");
+        return Ok(());
+    }
+
+    println!("AI Processing Queue:\n");
+    println!("{:<15} {:<12} {:<8} {:<20} {:<6}", "VIDEO_ID", "STATUS", "PRIORITY", "CREATED", "CLAIMS");
+    println!("{}", "-".repeat(65));
+
+    for item in items {
+        let created = item.created_at.format("%Y-%m-%d %H:%M").to_string();
+        println!(
+            "{:<15} {:<12} {:<8} {:<20} {:<6}",
+            &item.video_id[..item.video_id.len().min(14)],
+            item.status.as_str(),
+            item.priority,
+            created,
+            item.claims_extracted
+        );
+        if let Some(ref err) = item.error_message {
+            println!("  Error: {}", err);
+        }
+    }
+
+    Ok(())
+}
+
+fn cmd_queue_add(db: &Database, video_id: &str, priority: i32) -> Result<()> {
+    // Check if video exists
+    if db.get_video(video_id)?.is_none() {
+        anyhow::bail!("Video '{}' not found", video_id);
+    }
+
+    db.add_to_queue(video_id, priority)?;
+    println!("Added '{}' to processing queue with priority {}", video_id, priority);
+    Ok(())
+}
+
+fn cmd_queue_skip(db: &Database, video_id: &str) -> Result<()> {
+    if db.queue_skip(video_id)? {
+        println!("Skipped '{}'", video_id);
+    } else {
+        println!("Video '{}' not found in queue", video_id);
+    }
+    Ok(())
+}
+
+fn cmd_queue_reset(db: &Database, video_id: &str) -> Result<()> {
+    if db.queue_reset(video_id)? {
+        println!("Reset '{}' to pending", video_id);
+    } else {
+        println!("Video '{}' not found in queue", video_id);
+    }
+    Ok(())
+}
+
+fn cmd_queue_start(db: &Database, video_id: &str) -> Result<()> {
+    if db.queue_start(video_id)? {
+        println!("Started processing '{}'", video_id);
+    } else {
+        println!("Video '{}' not found in queue or not pending", video_id);
+    }
+    Ok(())
+}
+
+fn cmd_queue_complete(db: &Database, video_id: &str, claims: i32) -> Result<()> {
+    if db.queue_complete(video_id, claims)? {
+        println!("Completed '{}' with {} claims extracted", video_id, claims);
+    } else {
+        println!("Video '{}' not found in queue", video_id);
+    }
+    Ok(())
+}
+
+fn cmd_queue_fail(db: &Database, video_id: &str, reason: &str) -> Result<()> {
+    if db.queue_fail(video_id, reason)? {
+        println!("Marked '{}' as failed: {}", video_id, reason);
+    } else {
+        println!("Video '{}' not found in queue", video_id);
+    }
+    Ok(())
+}
+
+fn cmd_queue_clear(db: &Database, completed: bool, failed: bool) -> Result<()> {
+    use engine::ProcessingStatus;
+
+    if !completed && !failed {
+        println!("Specify --completed or --failed to clear");
+        return Ok(());
+    }
+
+    let mut cleared = 0;
+    if completed {
+        cleared += db.queue_clear(ProcessingStatus::Completed)?;
+    }
+    if failed {
+        cleared += db.queue_clear(ProcessingStatus::Failed)?;
+    }
+
+    println!("Cleared {} items from queue", cleared);
+    Ok(())
+}
+
+fn cmd_export_transcript(db: &Database, video_id: &str) -> Result<()> {
+    let video = db.get_video(video_id)?
+        .ok_or_else(|| anyhow::anyhow!("Video '{}' not found", video_id))?;
+
+    let transcript = db.get_transcript(video_id)?
+        .ok_or_else(|| anyhow::anyhow!("No transcript for video '{}'", video_id))?;
+
+    // Print header comment with video info
+    println!("# Video: {}", video.title);
+    println!("# ID: {}", video.id);
+    if let Some(ref channel) = video.channel {
+        println!("# Channel: {}", channel);
+    }
+    println!("# Segments: {}", transcript.segments.len());
+    println!("#");
+    println!("# Transcript:");
+    println!();
+
+    // Print transcript with timestamps
+    for segment in &transcript.segments {
+        let minutes = (segment.start_time / 60.0) as u32;
+        let seconds = (segment.start_time % 60.0) as u32;
+        println!("[{:02}:{:02}] {}", minutes, seconds, segment.text);
+    }
+
+    Ok(())
+}
+
+fn cmd_export_queue(db: &Database) -> Result<()> {
+    let ids = db.get_pending_video_ids()?;
+
+    if ids.is_empty() {
+        println!("# No pending videos in queue");
+        return Ok(());
+    }
+
+    println!("# Pending videos in AI processing queue:");
+    for id in ids {
+        println!("{}", id);
+    }
 
     Ok(())
 }

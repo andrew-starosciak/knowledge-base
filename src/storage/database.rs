@@ -1,7 +1,7 @@
 use anyhow::Result;
 use rusqlite::{Connection, params};
 use std::path::Path;
-use super::models::{Video, Transcript, TranscriptSegment, SearchResult, SegmentMatch, Era, Region, Topic, Collection, Note, Location, MapPin, AutoTags, SavedSearch, AdvancedSearchResult, ReportEntry, GeoJsonFeature, GeoJsonGeometry, GeoJsonProperties, GeoJsonCollection, Claim, ClaimCategory, Confidence, ClaimLink, LinkType, ClaimWithLinks, TranscriptLayer, TranscriptChunk, Embedding, EmbeddingSource, SimilarityResult, HybridSearchResult, ChunkMatch, EmbeddingStats, CyclicalType, CyclicalIndicator, LoopType, RelationStrength, CausalRelation, TransmissionType, IdeaTransmission, SystemPosition, GeopoliticalEntity, SurplusFlow, BraudelTimescale, TemporalObservation, FrameworkStats, MapOfContent, MocWithClaims, QuestionStatus, ResearchQuestion, QuestionWithEvidence, DetectedPattern, PatternType, ReviewQueue, SynthesisStats};
+use super::models::{Video, Transcript, TranscriptSegment, SearchResult, SegmentMatch, Era, Region, Topic, Collection, Note, Location, MapPin, AutoTags, SavedSearch, AdvancedSearchResult, ReportEntry, GeoJsonFeature, GeoJsonGeometry, GeoJsonProperties, GeoJsonCollection, Claim, ClaimCategory, Confidence, ClaimLink, LinkType, ClaimWithLinks, TranscriptLayer, TranscriptChunk, Embedding, EmbeddingSource, SimilarityResult, HybridSearchResult, ChunkMatch, EmbeddingStats, CyclicalType, CyclicalIndicator, LoopType, RelationStrength, CausalRelation, TransmissionType, IdeaTransmission, SystemPosition, GeopoliticalEntity, SurplusFlow, BraudelTimescale, TemporalObservation, FrameworkStats, MapOfContent, MocWithClaims, QuestionStatus, ResearchQuestion, QuestionWithEvidence, DetectedPattern, PatternType, ReviewQueue, SynthesisStats, ProcessingStatus, AIProcessingQueue};
 use chrono::{DateTime, NaiveDate, Utc};
 
 pub struct Database {
@@ -381,6 +381,22 @@ impl Database {
                 claim_id INTEGER PRIMARY KEY REFERENCES claims(id) ON DELETE CASCADE,
                 last_accessed TEXT NOT NULL
             );
+
+            -- Phase 10: AI Processing Queue
+            CREATE TABLE IF NOT EXISTS ai_processing_queue (
+                id INTEGER PRIMARY KEY,
+                video_id TEXT NOT NULL UNIQUE REFERENCES videos(id),
+                status TEXT NOT NULL DEFAULT 'pending',
+                priority INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                started_at TEXT,
+                completed_at TEXT,
+                error_message TEXT,
+                claims_extracted INTEGER NOT NULL DEFAULT 0
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_ai_queue_status ON ai_processing_queue(status);
+            CREATE INDEX IF NOT EXISTS idx_ai_queue_priority ON ai_processing_queue(priority DESC);
             "#,
         )?;
 
@@ -4139,6 +4155,169 @@ impl Database {
             detected_patterns: pattern_count,
             stale_claims: stale_count,
             orphan_claims: orphan_count,
+        })
+    }
+
+    // Phase 10: AI Processing Queue
+
+    pub fn add_to_queue(&self, video_id: &str, priority: i32) -> Result<i64> {
+        let now = Utc::now().to_rfc3339();
+        self.conn.execute(
+            "INSERT INTO ai_processing_queue (video_id, status, priority, created_at, claims_extracted)
+             VALUES (?1, 'pending', ?2, ?3, 0)
+             ON CONFLICT(video_id) DO UPDATE SET priority = ?2",
+            params![video_id, priority, now],
+        )?;
+        Ok(self.conn.last_insert_rowid())
+    }
+
+    pub fn get_queue(&self, include_completed: bool) -> Result<Vec<AIProcessingQueue>> {
+        let sql = if include_completed {
+            "SELECT id, video_id, status, priority, created_at, started_at, completed_at, error_message, claims_extracted
+             FROM ai_processing_queue
+             ORDER BY
+                CASE status
+                    WHEN 'in_progress' THEN 0
+                    WHEN 'pending' THEN 1
+                    WHEN 'failed' THEN 2
+                    WHEN 'completed' THEN 3
+                    WHEN 'skipped' THEN 4
+                END,
+                priority DESC, created_at ASC"
+        } else {
+            "SELECT id, video_id, status, priority, created_at, started_at, completed_at, error_message, claims_extracted
+             FROM ai_processing_queue
+             WHERE status IN ('pending', 'in_progress', 'failed')
+             ORDER BY
+                CASE status
+                    WHEN 'in_progress' THEN 0
+                    WHEN 'pending' THEN 1
+                    WHEN 'failed' THEN 2
+                END,
+                priority DESC, created_at ASC"
+        };
+
+        let mut stmt = self.conn.prepare(sql)?;
+        let mut items = Vec::new();
+        let mut rows = stmt.query([])?;
+
+        while let Some(row) = rows.next()? {
+            items.push(self.row_to_queue_item(row)?);
+        }
+        Ok(items)
+    }
+
+    pub fn get_queue_item(&self, video_id: &str) -> Result<Option<AIProcessingQueue>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, video_id, status, priority, created_at, started_at, completed_at, error_message, claims_extracted
+             FROM ai_processing_queue WHERE video_id = ?1"
+        )?;
+
+        let mut rows = stmt.query(params![video_id])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(self.row_to_queue_item(row)?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn get_next_pending(&self) -> Result<Option<AIProcessingQueue>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, video_id, status, priority, created_at, started_at, completed_at, error_message, claims_extracted
+             FROM ai_processing_queue
+             WHERE status = 'pending'
+             ORDER BY priority DESC, created_at ASC
+             LIMIT 1"
+        )?;
+
+        let mut rows = stmt.query([])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(self.row_to_queue_item(row)?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn queue_start(&self, video_id: &str) -> Result<bool> {
+        let now = Utc::now().to_rfc3339();
+        let rows = self.conn.execute(
+            "UPDATE ai_processing_queue SET status = 'in_progress', started_at = ?1 WHERE video_id = ?2 AND status = 'pending'",
+            params![now, video_id],
+        )?;
+        Ok(rows > 0)
+    }
+
+    pub fn queue_complete(&self, video_id: &str, claims_extracted: i32) -> Result<bool> {
+        let now = Utc::now().to_rfc3339();
+        let rows = self.conn.execute(
+            "UPDATE ai_processing_queue SET status = 'completed', completed_at = ?1, claims_extracted = ?2 WHERE video_id = ?3",
+            params![now, claims_extracted, video_id],
+        )?;
+        Ok(rows > 0)
+    }
+
+    pub fn queue_fail(&self, video_id: &str, error_message: &str) -> Result<bool> {
+        let now = Utc::now().to_rfc3339();
+        let rows = self.conn.execute(
+            "UPDATE ai_processing_queue SET status = 'failed', completed_at = ?1, error_message = ?2 WHERE video_id = ?3",
+            params![now, error_message, video_id],
+        )?;
+        Ok(rows > 0)
+    }
+
+    pub fn queue_skip(&self, video_id: &str) -> Result<bool> {
+        let now = Utc::now().to_rfc3339();
+        let rows = self.conn.execute(
+            "UPDATE ai_processing_queue SET status = 'skipped', completed_at = ?1 WHERE video_id = ?2",
+            params![now, video_id],
+        )?;
+        Ok(rows > 0)
+    }
+
+    pub fn queue_reset(&self, video_id: &str) -> Result<bool> {
+        let rows = self.conn.execute(
+            "UPDATE ai_processing_queue SET status = 'pending', started_at = NULL, completed_at = NULL, error_message = NULL WHERE video_id = ?1",
+            params![video_id],
+        )?;
+        Ok(rows > 0)
+    }
+
+    pub fn queue_clear(&self, status: ProcessingStatus) -> Result<usize> {
+        let rows = self.conn.execute(
+            "DELETE FROM ai_processing_queue WHERE status = ?1",
+            params![status.as_str()],
+        )?;
+        Ok(rows)
+    }
+
+    pub fn get_pending_video_ids(&self) -> Result<Vec<String>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT video_id FROM ai_processing_queue WHERE status = 'pending' ORDER BY priority DESC, created_at ASC"
+        )?;
+        let mut ids = Vec::new();
+        let mut rows = stmt.query([])?;
+        while let Some(row) = rows.next()? {
+            ids.push(row.get(0)?);
+        }
+        Ok(ids)
+    }
+
+    fn row_to_queue_item(&self, row: &rusqlite::Row) -> Result<AIProcessingQueue> {
+        let status_str: String = row.get(2)?;
+        let created_str: String = row.get(4)?;
+        let started_str: Option<String> = row.get(5)?;
+        let completed_str: Option<String> = row.get(6)?;
+
+        Ok(AIProcessingQueue {
+            id: row.get(0)?,
+            video_id: row.get(1)?,
+            status: ProcessingStatus::from_str(&status_str).unwrap_or(ProcessingStatus::Pending),
+            priority: row.get(3)?,
+            created_at: DateTime::parse_from_rfc3339(&created_str)?.with_timezone(&Utc),
+            started_at: started_str.map(|s| DateTime::parse_from_rfc3339(&s).ok()).flatten().map(|d| d.with_timezone(&Utc)),
+            completed_at: completed_str.map(|s| DateTime::parse_from_rfc3339(&s).ok()).flatten().map(|d| d.with_timezone(&Utc)),
+            error_message: row.get(7)?,
+            claims_extracted: row.get(8)?,
         })
     }
 }

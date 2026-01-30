@@ -856,3 +856,50 @@ pub struct SynthesisStats {
     pub stale_claims: i64,
     pub orphan_claims: i64,
 }
+
+// Phase 10: AI Processing Queue
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ProcessingStatus {
+    Pending,     // Awaiting processing
+    InProgress,  // Currently being processed
+    Completed,   // Successfully processed
+    Failed,      // Processing failed
+    Skipped,     // Manually skipped
+}
+
+impl ProcessingStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ProcessingStatus::Pending => "pending",
+            ProcessingStatus::InProgress => "in_progress",
+            ProcessingStatus::Completed => "completed",
+            ProcessingStatus::Failed => "failed",
+            ProcessingStatus::Skipped => "skipped",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "pending" => Some(ProcessingStatus::Pending),
+            "in_progress" | "inprogress" | "processing" => Some(ProcessingStatus::InProgress),
+            "completed" | "done" => Some(ProcessingStatus::Completed),
+            "failed" | "error" => Some(ProcessingStatus::Failed),
+            "skipped" | "skip" => Some(ProcessingStatus::Skipped),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AIProcessingQueue {
+    pub id: i64,
+    pub video_id: String,
+    pub status: ProcessingStatus,
+    pub priority: i32,                        // Higher = process first
+    pub created_at: DateTime<Utc>,
+    pub started_at: Option<DateTime<Utc>>,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub error_message: Option<String>,        // If processing failed
+    pub claims_extracted: i32,                // Count of claims added
+}

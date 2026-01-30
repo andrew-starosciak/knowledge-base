@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Knowledge Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background: #1a1a2e;
+            color: #eee;
+        }
+        header {
+            padding: 12px 20px;
+            background: #16213e;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        header h1 {
+            font-size: 1.2rem;
+            font-weight: 500;
+        }
+        .filters {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .filter-group label {
+            font-size: 0.85rem;
+            color: #aaa;
+        }
+        select {
+            padding: 6px 12px;
+            border-radius: 4px;
+            border: 1px solid #333;
+            background: #0f0f23;
+            color: #eee;
+            font-size: 0.9rem;
+        }
+        #map {
+            flex: 1;
+        }
+        .timeline {
+            padding: 15px 20px;
+            background: #16213e;
+        }
+        .timeline-track {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .era-buttons {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+        }
+        .era-btn {
+            padding: 6px 12px;
+            border: 1px solid #333;
+            background: #0f0f23;
+            color: #aaa;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+        }
+        .era-btn:hover {
+            background: #1a1a3e;
+            color: #fff;
+        }
+        .era-btn.active {
+            background: #4a69bd;
+            color: #fff;
+            border-color: #4a69bd;
+        }
+        .pin-count {
+            margin-left: auto;
+            font-size: 0.85rem;
+            color: #888;
+        }
+        .leaflet-popup-content {
+            color: #333;
+        }
+        .popup-title {
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        .popup-meta {
+            font-size: 0.85rem;
+            color: #666;
+            margin-bottom: 8px;
+        }
+        .popup-note {
+            font-style: italic;
+            margin-bottom: 8px;
+        }
+        .popup-link {
+            display: inline-block;
+            padding: 4px 8px;
+            background: #4a69bd;
+            color: #fff;
+            text-decoration: none;
+            border-radius: 3px;
+            font-size: 0.85rem;
+        }
+        .popup-link:hover {
+            background: #3c5aa6;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Knowledge Map</h1>
+        <div class="filters">
+            <div class="filter-group">
+                <label>Topic:</label>
+                <select id="topic-select">
+                    <option value="">All Topics</option>
+                </select>
+            </div>
+        </div>
+        <span class="pin-count" id="pin-count">0 locations</span>
+    </header>
+
+    <div id="map"></div>
+
+    <div class="timeline">
+        <div class="timeline-track">
+            <div class="era-buttons" id="era-buttons">
+                <button class="era-btn active" data-era="">All Eras</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize map
+        const map = L.map('map').setView([30, 35], 3);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        let markers = L.layerGroup().addTo(map);
+        let currentEra = '';
+        let currentTopic = '';
+
+        // Load eras
+        async function loadEras() {
+            const res = await fetch('/api/eras');
+            const eras = await res.json();
+            const container = document.getElementById('era-buttons');
+
+            eras.forEach(era => {
+                const btn = document.createElement('button');
+                btn.className = 'era-btn';
+                btn.dataset.era = era.name;
+                btn.textContent = era.name;
+                btn.onclick = () => selectEra(era.name);
+                container.appendChild(btn);
+            });
+        }
+
+        // Load topics
+        async function loadTopics() {
+            const res = await fetch('/api/topics');
+            const topics = await res.json();
+            const select = document.getElementById('topic-select');
+
+            topics.forEach(topic => {
+                const opt = document.createElement('option');
+                opt.value = topic.name;
+                opt.textContent = topic.name;
+                select.appendChild(opt);
+            });
+        }
+
+        // Select era
+        function selectEra(era) {
+            currentEra = era;
+            document.querySelectorAll('.era-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.era === era);
+            });
+            loadPins();
+        }
+
+        // Load pins
+        async function loadPins() {
+            let url = '/api/pins?';
+            if (currentEra) url += `era=${encodeURIComponent(currentEra)}&`;
+            if (currentTopic) url += `topic=${encodeURIComponent(currentTopic)}&`;
+
+            const res = await fetch(url);
+            const pins = await res.json();
+
+            markers.clearLayers();
+
+            // Group pins by location
+            const grouped = {};
+            pins.forEach(pin => {
+                const key = `${pin.location.lat},${pin.location.lon}`;
+                if (!grouped[key]) {
+                    grouped[key] = {
+                        location: pin.location,
+                        pins: []
+                    };
+                }
+                grouped[key].pins.push(pin);
+            });
+
+            Object.values(grouped).forEach(group => {
+                const loc = group.location;
+                const marker = L.marker([loc.lat, loc.lon]);
+
+                let popupContent = `<div class="popup-title">${loc.name}</div>`;
+
+                group.pins.forEach(pin => {
+                    popupContent += `<div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #eee;">`;
+                    popupContent += `<div class="popup-meta">`;
+                    popupContent += `<strong>${pin.video_title}</strong><br>`;
+                    if (pin.era) popupContent += `Era: ${pin.era}<br>`;
+                    if (pin.topic) popupContent += `Topic: ${pin.topic}`;
+                    popupContent += `</div>`;
+
+                    if (pin.note) {
+                        popupContent += `<div class="popup-note">"${pin.note}"</div>`;
+                    }
+
+                    let videoUrl = `https://www.youtube.com/watch?v=${pin.video_id}`;
+                    if (pin.timestamp) {
+                        videoUrl += `&t=${Math.floor(pin.timestamp)}s`;
+                    }
+                    popupContent += `<a href="${videoUrl}" target="_blank" class="popup-link">Watch Video</a>`;
+                    popupContent += `</div>`;
+                });
+
+                marker.bindPopup(popupContent);
+                markers.addLayer(marker);
+            });
+
+            document.getElementById('pin-count').textContent =
+                `${pins.length} location${pins.length !== 1 ? 's' : ''}`;
+        }
+
+        // Event listeners
+        document.getElementById('topic-select').addEventListener('change', (e) => {
+            currentTopic = e.target.value;
+            loadPins();
+        });
+
+        document.querySelector('.era-btn').onclick = () => selectEra('');
+
+        // Initial load
+        loadEras();
+        loadTopics();
+        loadPins();
+    </script>
+</body>
+</html>

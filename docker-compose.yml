@@ -1,0 +1,11 @@
+services:
+  engine:
+    build: .
+    container_name: history-engine
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+    # Override for CLI commands:
+    # docker compose run --rm engine fetch "https://youtube.com/..."

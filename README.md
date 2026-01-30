@@ -4,6 +4,25 @@ A CLI tool for building a knowledge base from YouTube video transcripts, focused
 
 ## Installation
 
+### Docker (Recommended)
+
+```bash
+# Build and start the web server
+docker compose up -d --build
+
+# Run CLI commands
+docker compose run --rm engine list
+docker compose run --rm engine fetch "https://youtube.com/watch?v=..."
+
+# View logs
+docker compose logs -f
+
+# Stop
+docker compose down
+```
+
+### Local Development
+
 ```bash
 cargo build --release
 ```
@@ -149,5 +168,6 @@ engine export-transcript <id>  # Export transcript for AI
 
 ## Data Location
 
-- Database: `knowledge.db` (SQLite)
+- Database: `./data/knowledge.db` (SQLite)
 - All data is local and portable
+- Web UI available at `http://localhost:3000` when running the server

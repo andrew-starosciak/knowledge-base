@@ -1,5 +1,5 @@
 # Stage 1: Build the Rust binary
-FROM rust:1.75-bookworm AS builder
+FROM rust:1.83-bookworm AS builder
 
 WORKDIR /build
 
@@ -11,8 +11,9 @@ RUN mkdir src && echo "fn main() {}" > src/main.rs
 RUN cargo build --release
 RUN rm -rf src
 
-# Copy actual source and rebuild
+# Copy actual source and static files, then rebuild
 COPY src ./src
+COPY static ./static
 RUN touch src/main.rs && cargo build --release
 
 # Stage 2: Runtime image
@@ -52,5 +53,5 @@ ENV PORT=3000
 EXPOSE 3000
 
 # Default: run web server
-ENTRYPOINT ["/app/engine"]
-CMD ["serve", "--database", "/data/knowledge.db", "--port", "3000"]
+ENTRYPOINT ["/app/engine", "--database", "/data/knowledge.db"]
+CMD ["serve", "--port", "3000"]

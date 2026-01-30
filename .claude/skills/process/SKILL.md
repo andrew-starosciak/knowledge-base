@@ -1,16 +1,18 @@
 ---
 name: process
-description: Process videos from AI queue - extract claims, apply frameworks, organize with MOCs
+description: Process videos from AI queue - extract claims, tag eras/regions, map locations, apply frameworks, organize with MOCs
 allowed-tools: Bash(./target/release/engine *), Bash(./target/debug/engine *), Bash(cargo run -- *), Read, Grep
 ---
 
 # AI Claim Extraction & Synthesis Processor
 
 You are processing videos from the Historical Synthesis Engine's AI queue. Your job is to:
-1. Extract atomic claims from transcripts
-2. Apply analytical frameworks
-3. Organize claims into Maps of Content
-4. Generate research questions
+1. Tag videos with era and geographic region
+2. Extract atomic claims from transcripts
+3. Apply analytical frameworks
+4. Extract locations for map visualization
+5. Organize claims into Maps of Content
+6. Generate research questions
 
 ## Current Queue Status
 !`./target/debug/engine queue 2>/dev/null || cargo run -- queue 2>/dev/null`
@@ -34,15 +36,46 @@ For each pending video, follow ALL these steps:
 ```
 
 Read carefully, identifying:
+- Historical era and geographic region covered
 - Factual statements with timestamps
 - Causal claims (X causes Y)
 - Cyclical patterns (recurring historical dynamics)
 - Ideas being transmitted between cultures
 - Geopolitical dynamics (core/periphery)
+- Specific locations mentioned (cities, sites, regions)
 
 ---
 
-### Step 3: Extract Atomic Claims
+### Step 3: Tag Era and Region
+
+Based on the transcript content, tag the video with its historical era and geographic region:
+
+```bash
+./target/debug/engine tag <video-id> --era "<era>" --region "<region>"
+```
+
+**Available Eras:**
+- `Prehistoric` - Before written records (~10,000 BCE and earlier)
+- `Bronze Age` - ~3300-1200 BCE
+- `Iron Age` - ~1200-500 BCE
+- `Classical Antiquity` - ~500 BCE-500 CE
+- `Late Antiquity` - ~300-700 CE
+- `Medieval` - ~500-1500 CE
+- `Early Modern` - ~1500-1800 CE
+- `Modern` - ~1800 CE-present
+
+**Regions** (create as needed):
+- Geographic: "Mesopotamia", "Egypt", "Levant", "Anatolia", "Mediterranean", "China", "India"
+- Cultural: "Near East", "Central Asia", "Mesoamerica"
+
+Check existing regions:
+```bash
+./target/debug/engine regions
+```
+
+---
+
+### Step 4: Extract Atomic Claims
 
 For each significant claim:
 
@@ -69,7 +102,7 @@ For each significant claim:
 
 ---
 
-### Step 4: Link Related Claims
+### Step 5: Link Related Claims
 
 Connect claims to build the knowledge graph:
 
@@ -89,7 +122,7 @@ Connect claims to build the knowledge graph:
 
 ---
 
-### Step 5: Apply Analytical Frameworks
+### Step 6: Apply Analytical Frameworks
 
 #### 5a. Cliodynamics (Turchin) - Cyclical Patterns
 When you identify recurring historical patterns:
@@ -151,7 +184,42 @@ Classify claims by temporal scope:
 
 ---
 
-### Step 6: Organize with Maps of Content (MOCs)
+### Step 7: Extract Locations for Map
+
+Identify geographic locations mentioned in the transcript and add them for map visualization:
+
+```bash
+./target/debug/engine locate <video-id> \
+  --place "Place Name" \
+  --lat <latitude> \
+  --lon <longitude> \
+  --era "<era>" \
+  --at <timestamp_seconds> \
+  --note "Why this location is significant"
+```
+
+**Common Historical Locations:**
+| Place | Lat | Lon |
+|-------|-----|-----|
+| Göbekli Tepe | 37.223 | 38.922 |
+| Çatalhöyük | 37.666 | 32.828 |
+| Jericho | 31.871 | 35.444 |
+| Uruk | 31.322 | 45.636 |
+| Babylon | 32.536 | 44.421 |
+| Memphis (Egypt) | 29.846 | 31.254 |
+| Athens | 37.976 | 23.735 |
+| Rome | 41.902 | 12.496 |
+| Constantinople | 41.008 | 28.978 |
+| Jerusalem | 31.778 | 35.235 |
+
+For unlisted locations, use approximate coordinates. Check existing:
+```bash
+./target/debug/engine locations
+```
+
+---
+
+### Step 8: Organize with Maps of Content (MOCs)
 
 If the video covers a coherent topic with 5+ related claims, create or add to a MOC:
 
@@ -170,7 +238,7 @@ Check existing MOCs first:
 
 ---
 
-### Step 7: Generate Research Questions
+### Step 9: Generate Research Questions
 
 If the video raises interesting questions for further investigation:
 
@@ -190,7 +258,7 @@ Check existing questions:
 
 ---
 
-### Step 8: Detect Patterns
+### Step 10: Detect Patterns
 
 If you notice patterns across this video and others:
 
@@ -207,7 +275,7 @@ Types:
 
 ---
 
-### Step 9: Mark as Completed
+### Step 11: Mark as Completed
 
 Count claims extracted and complete:
 
@@ -217,7 +285,7 @@ Count claims extracted and complete:
 
 ---
 
-### Step 10: Check for More
+### Step 12: Check for More
 
 ```bash
 ./target/debug/engine queue
@@ -241,6 +309,9 @@ If processing fails:
 ./target/debug/engine queue-start Jjqf9T59uY0
 ./target/debug/engine export-transcript Jjqf9T59uY0
 
+# Tag era and region
+./target/debug/engine tag Jjqf9T59uY0 --era "Prehistoric" --region "Levant"
+
 # Extract claims
 ./target/debug/engine add-claim Jjqf9T59uY0 "Agriculture preceded permanent settlement" \
   --quote "farming actually happened first" --category factual --confidence high --at 300
@@ -252,8 +323,13 @@ If processing fails:
 ./target/debug/engine link 1 2 --as supports
 
 # Apply frameworks
-./target/debug/engine transmission "Mother goddess cult" -f "Levant" -t "Anatolia" -y expansion -v Jjqf9T59uY0
+./target/debug/engine transmission "Mother goddess cult" -f "Levant" -t "Anatolia" -y horizontal -v Jjqf9T59uY0
 ./target/debug/engine timescale 2 -s longue_duree
+
+# Add locations for map
+./target/debug/engine locate Jjqf9T59uY0 --place "Göbekli Tepe" --lat 37.223 --lon 38.922 --era "Prehistoric" --note "Oldest known temple complex"
+./target/debug/engine locate Jjqf9T59uY0 --place "Çatalhöyük" --lat 37.666 --lon 32.828 --era "Prehistoric" --note "Early Neolithic settlement, 8000 people"
+./target/debug/engine locate Jjqf9T59uY0 --place "Jericho" --lat 31.871 --lon 35.444 --era "Prehistoric" --note "Tower of Jericho, Natufian site"
 
 # Create MOC
 ./target/debug/engine moc-create "Neolithic Revolution" --description "Theories on agricultural transition"
@@ -273,9 +349,11 @@ If processing fails:
 ## Quality Checklist
 
 Before marking complete, verify:
+- [ ] Video tagged with era and region
 - [ ] All major claims extracted with quotes
 - [ ] Claims linked (2+ links each)
 - [ ] Analytical frameworks applied where relevant
+- [ ] Key locations added for map visualization
 - [ ] Claims added to appropriate MOC
 - [ ] Research questions generated if applicable
 - [ ] Patterns noted if cross-video connections exist

@@ -293,6 +293,7 @@
         .leaflet-popup-content { color: #333; }
         .popup-title { font-weight: 600; margin-bottom: 5px; }
         .popup-meta { font-size: 0.85rem; color: #666; margin-bottom: 8px; }
+        .popup-note { font-size: 0.85rem; color: #444; font-style: italic; margin-bottom: 8px; padding: 4px; background: #f5f5f5; border-radius: 3px; }
         .popup-link {
             display: inline-block;
             padding: 4px 8px;
@@ -743,7 +744,11 @@
                 let popup = `<div class="popup-title">${pin.location.name}</div>`;
                 popup += `<div class="popup-meta">${pin.video_title}</div>`;
                 if (pin.era) popup += `<div class="popup-meta">Era: ${pin.era}</div>`;
-                popup += `<a href="https://youtube.com/watch?v=${pin.video_id}" target="_blank" class="popup-link">Watch</a>`;
+                if (pin.note) popup += `<div class="popup-note">${pin.note}</div>`;
+                const ytUrl = pin.timestamp
+                    ? `https://youtube.com/watch?v=${pin.video_id}&t=${Math.floor(pin.timestamp)}s`
+                    : `https://youtube.com/watch?v=${pin.video_id}`;
+                popup += `<a href="${ytUrl}" target="_blank" class="popup-link">Watch Video</a>`;
                 marker.bindPopup(popup);
                 markers.addLayer(marker);
             });

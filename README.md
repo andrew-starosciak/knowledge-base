@@ -22,14 +22,29 @@ pip install yt-dlp
 ### 1. Ingest Content
 
 ```bash
-# Fetch a video transcript
+# Fetch a video transcript (auto-added to AI processing queue)
 engine fetch "https://youtube.com/watch?v=..."
+
+# Or fetch without queueing
+engine fetch "https://youtube.com/watch?v=..." --no-queue
 
 # Auto-tag based on title/description
 engine auto-tag <video-id>
 ```
 
-### 2. Extract Claims
+### 2. Extract Claims (Manual or AI-Assisted)
+
+**Option A: AI-Assisted (Recommended)**
+
+Use the `/process` Claude Code skill to automatically extract claims:
+```bash
+# In Claude Code, run:
+/process
+```
+
+This will process queued videos, extracting claims, applying frameworks, and organizing into MOCs.
+
+**Option B: Manual Extraction**
 
 Watch the video and extract atomic factual statements:
 
@@ -124,6 +139,12 @@ engine claim <id>              # Show claim with links
 engine stats                   # Database statistics
 engine framework-stats         # Analytical framework stats
 engine synthesis-stats         # MOCs, questions, patterns
+
+# AI Processing Queue
+engine queue                   # Show pending videos
+engine queue --all             # Show all queue items
+engine queue-add <id>          # Add video to queue
+engine export-transcript <id>  # Export transcript for AI
 ```
 
 ## Data Location

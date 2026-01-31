@@ -88,11 +88,13 @@ For each significant claim:
 ```
 
 **Categories:**
-- `factual` - General historical facts
+- `factual` - General facts (historical or otherwise)
 - `causal` - X causes Y relationships
-- `cyclical` - Recurring historical patterns
+- `cyclical` - Recurring patterns
 - `memetic` - Idea/ideology transmission
 - `geopolitical` - Core/periphery dynamics
+- `phenomenological` - First-person experiential claims (consciousness, spirituality)
+- `metaphysical` - Claims about nature of reality
 
 **Guidelines:**
 - Aim for 10-30 claims per video
@@ -124,7 +126,15 @@ Connect claims to build the knowledge graph:
 
 ### Step 6: Apply Analytical Frameworks
 
-#### 5a. Cliodynamics (Turchin) - Cyclical Patterns
+**Note:** Not all frameworks apply to all content. Skip frameworks that don't fit:
+- **Historical content** → Use all applicable frameworks below
+- **Philosophy/Spirituality** → Primarily use Causal Chains and Idea Transmission; skip Cliodynamics/World-Systems unless discussing historical religious movements
+- **Science/Technical** → Primarily use Causal Chains
+
+#### 6a. Cliodynamics (Turchin) - Cyclical Patterns
+*Use for: Historical content about civilizations, empires, social movements*
+*Skip for: Abstract philosophy, consciousness studies, technical content*
+
 When you identify recurring historical patterns:
 
 ```bash
@@ -139,7 +149,9 @@ Types:
 - `asabiyyah` - Social cohesion (Ibn Khaldun)
 - `center_periphery` - Core vs edge dynamics
 
-#### 5b. Causal Chains
+#### 6b. Causal Chains
+*Use for: All content types - universal framework*
+
 When claims have cause-effect relationships:
 
 ```bash
@@ -148,8 +160,10 @@ When claims have cause-effect relationships:
   -s <strong|moderate|weak|speculative>
 ```
 
-#### 5c. Idea Transmission (Boyd/Richerson)
-When ideas spread between cultures:
+#### 6c. Idea Transmission (Boyd/Richerson)
+*Use for: Historical AND philosophical content - tracks how ideas spread*
+
+When ideas spread between cultures or traditions:
 
 ```bash
 ./target/debug/engine transmission "idea name" \
@@ -159,7 +173,10 @@ When ideas spread between cultures:
   -v <video-id>
 ```
 
-#### 5d. World-Systems (Wallerstein)
+#### 6d. World-Systems (Wallerstein)
+*Use for: Historical content about economics, trade, imperialism*
+*Skip for: Philosophy, consciousness, spirituality*
+
 When geopolitical dynamics are discussed:
 
 ```bash
@@ -171,7 +188,9 @@ When geopolitical dynamics are discussed:
 ./target/debug/engine flow <from-entity-id> <to-entity-id> "grain" --era "Classical Antiquity"
 ```
 
-#### 5e. Braudel's Timescales
+#### 6e. Braudel's Timescales
+*Use for: Historical content; can apply to philosophy (perennial vs contemporary ideas)*
+
 Classify claims by temporal scope:
 
 ```bash

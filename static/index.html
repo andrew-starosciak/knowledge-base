@@ -409,6 +409,12 @@
                 <option value="">All MOCs</option>
             </select>
         </div>
+        <div class="filter-group">
+            <label>Topic:</label>
+            <select id="topic-filter" onchange="applyFilters()">
+                <option value="">All Topics</option>
+            </select>
+        </div>
         <div class="era-buttons" id="era-buttons">
             <button class="era-btn active" data-era="">All Eras</button>
         </div>
@@ -422,6 +428,7 @@
         let currentView = 'graph';
         let currentVideoFilter = '';
         let currentMocFilter = '';
+        let currentTopicFilter = '';
         let currentEra = '';
 
         // Initialize
@@ -438,6 +445,7 @@
                 loadQuestions(),
                 loadVideos(),
                 loadEras(),
+                loadTopics(),
                 loadStats(),
                 loadQueue(),
                 loadReviewSummary()
@@ -546,6 +554,17 @@
                 btn.textContent = era.name;
                 btn.onclick = () => selectEra(era.name);
                 container.appendChild(btn);
+            });
+        }
+
+        // Load Topics
+        async function loadTopics() {
+            const res = await fetch('/api/topics');
+            const topics = await res.json();
+            const select = document.getElementById('topic-filter');
+
+            topics.forEach(topic => {
+                select.innerHTML += `<option value="${topic.name}">${topic.name}</option>`;
             });
         }
 
@@ -678,6 +697,8 @@
             let url = '/api/graph?';
             if (currentVideoFilter) url += `video_id=${currentVideoFilter}&`;
             if (currentMocFilter) url += `moc_id=${currentMocFilter}&`;
+            if (currentTopicFilter) url += `topic=${encodeURIComponent(currentTopicFilter)}&`;
+            if (currentEra) url += `era=${encodeURIComponent(currentEra)}&`;
 
             const res = await fetch(url);
             const data = await res.json();
@@ -840,7 +861,9 @@
         function applyFilters() {
             currentVideoFilter = document.getElementById('video-filter').value;
             currentMocFilter = document.getElementById('moc-filter').value;
+            currentTopicFilter = document.getElementById('topic-filter').value;
             loadGraph();
+            loadPins();
         }
 
         function selectEra(era) {
@@ -848,6 +871,7 @@
             document.querySelectorAll('.era-btn').forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.era === era);
             });
+            loadGraph();
             loadPins();
         }
 

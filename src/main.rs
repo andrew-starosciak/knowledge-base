@@ -1609,6 +1609,8 @@ fn cmd_serve(db_path: PathBuf, port: u16) -> Result<()> {
     struct GraphQuery {
         video_id: Option<String>,
         moc_id: Option<i64>,
+        era: Option<String>,
+        topic: Option<String>,
     }
 
     // Graph node/edge structures for vis.js
@@ -1773,6 +1775,22 @@ fn cmd_serve(db_path: PathBuf, port: u16) -> Result<()> {
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
                 .ok_or(StatusCode::NOT_FOUND)?;
             moc.claims
+        } else if let Some(ref era) = q.era {
+            // Filter by era: get videos with this era, then get their claims
+            let videos = db.browse_videos(Some(era), None).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let mut era_claims = Vec::new();
+            for video in videos {
+                era_claims.extend(db.list_claims_for_video(&video.id).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?);
+            }
+            era_claims
+        } else if let Some(ref topic) = q.topic {
+            // Filter by topic: get videos with this topic, then get their claims
+            let videos = db.browse_by_topic(topic).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let mut topic_claims = Vec::new();
+            for video in videos {
+                topic_claims.extend(db.list_claims_for_video(&video.id).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?);
+            }
+            topic_claims
         } else {
             // Default: get recent claims
             db.get_random_claims(50).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
@@ -2378,7 +2396,7 @@ fn cmd_add_claim(
         Some(c) => c,
         None => {
             println!("Invalid category: {}", category);
-            println!("Valid options: cyclical, causal, memetic, geopolitical, factual");
+            println!("Valid options: cyclical, causal, memetic, geopolitical, factual, phenomenological, metaphysical");
             return Ok(());
         }
     };
@@ -2458,7 +2476,7 @@ fn cmd_all_claims(db: &Database, category: Option<&str>) -> Result<()> {
             Some(cat) => db.list_claims_by_category(cat)?,
             None => {
                 println!("Invalid category: {}", cat_str);
-                println!("Valid options: cyclical, causal, memetic, geopolitical, factual");
+                println!("Valid options: cyclical, causal, memetic, geopolitical, factual, phenomenological, metaphysical");
                 return Ok(());
             }
         }

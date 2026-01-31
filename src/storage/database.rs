@@ -712,6 +712,7 @@ impl Database {
             ("Medieval", 50),
             ("Early Modern", 60),
             ("Modern", 70),
+            ("Timeless", 100),  // For philosophy, spirituality, perennial wisdom
         ];
 
         for (name, order) in default_eras {

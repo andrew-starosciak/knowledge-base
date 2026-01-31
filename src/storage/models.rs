@@ -179,6 +179,8 @@ pub enum ClaimCategory {
     MemeticTransmission,  // Idea/ideology spread
     GeopoliticalDynamic,  // Core/periphery, power relations
     Factual,              // General historical facts
+    Phenomenological,     // First-person experiential claims (consciousness, spirituality)
+    Metaphysical,         // Claims about nature of reality
 }
 
 impl ClaimCategory {
@@ -189,6 +191,8 @@ impl ClaimCategory {
             ClaimCategory::MemeticTransmission => "memetic",
             ClaimCategory::GeopoliticalDynamic => "geopolitical",
             ClaimCategory::Factual => "factual",
+            ClaimCategory::Phenomenological => "phenomenological",
+            ClaimCategory::Metaphysical => "metaphysical",
         }
     }
 
@@ -199,6 +203,8 @@ impl ClaimCategory {
             "memetic" | "memetic_transmission" => Some(ClaimCategory::MemeticTransmission),
             "geopolitical" | "geopolitical_dynamic" => Some(ClaimCategory::GeopoliticalDynamic),
             "factual" => Some(ClaimCategory::Factual),
+            "phenomenological" => Some(ClaimCategory::Phenomenological),
+            "metaphysical" => Some(ClaimCategory::Metaphysical),
             _ => None,
         }
     }

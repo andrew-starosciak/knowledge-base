@@ -1175,3 +1175,67 @@ pub struct EvidenceWithContext {
     pub source_title: Option<String>,
     pub claims: Vec<Claim>,
 }
+
+// ============================================================================
+// Unified Search Types
+// ============================================================================
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum SearchResultType {
+    Claim,
+    Video,
+    Moc,
+    Source,
+    Scholar,
+    Term,
+    Quote,
+    Evidence,
+    Visual,
+    Location,
+    Question,
+}
+
+impl std::fmt::Display for SearchResultType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SearchResultType::Claim => write!(f, "Claim"),
+            SearchResultType::Video => write!(f, "Video"),
+            SearchResultType::Moc => write!(f, "Moc"),
+            SearchResultType::Source => write!(f, "Source"),
+            SearchResultType::Scholar => write!(f, "Scholar"),
+            SearchResultType::Term => write!(f, "Term"),
+            SearchResultType::Quote => write!(f, "Quote"),
+            SearchResultType::Evidence => write!(f, "Evidence"),
+            SearchResultType::Visual => write!(f, "Visual"),
+            SearchResultType::Location => write!(f, "Location"),
+            SearchResultType::Question => write!(f, "Question"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UnifiedSearchResult {
+    pub result_type: SearchResultType,
+    pub id: i64,
+    pub title: String,
+    pub subtitle: Option<String>,
+    pub snippet: Option<String>,
+    pub score: f64,
+    pub video_id: Option<String>,
+    pub timestamp: Option<f64>,
+    pub location: Option<(f64, f64)>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchResponse {
+    pub query: String,
+    pub total: usize,
+    pub results: Vec<UnifiedSearchResult>,
+    pub facets: SearchFacets,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchFacets {
+    pub types: Vec<(SearchResultType, usize)>,
+    pub videos: Vec<(String, String, usize)>,
+}

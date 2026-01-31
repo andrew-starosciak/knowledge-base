@@ -377,12 +377,225 @@
         .badge-painting { background: #E91E63; }
         .badge-map { background: #00BCD4; }
         .badge-diagram { background: #607D8B; }
+
+        /* Command Palette Styles */
+        .command-palette-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 10000;
+            display: none;
+            align-items: flex-start;
+            justify-content: center;
+            padding-top: 100px;
+        }
+        .command-palette-overlay.open { display: flex; }
+
+        .command-palette {
+            width: 600px;
+            max-width: 90vw;
+            background: #16213e;
+            border-radius: 12px;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+        }
+
+        .command-palette-input-container {
+            display: flex;
+            align-items: center;
+            padding: 16px;
+            border-bottom: 1px solid #333;
+        }
+        .command-palette-input-container svg {
+            width: 20px;
+            height: 20px;
+            color: #888;
+            margin-right: 12px;
+            flex-shrink: 0;
+        }
+        .command-palette-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: #fff;
+            font-size: 1.1rem;
+            outline: none;
+        }
+        .command-palette-input::placeholder { color: #666; }
+
+        .command-palette-shortcut {
+            background: #0f0f23;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            color: #888;
+            flex-shrink: 0;
+        }
+
+        .command-palette-results {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .search-result-group {
+            padding: 8px 0;
+        }
+        .search-result-group-header {
+            padding: 8px 16px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #888;
+            text-transform: uppercase;
+        }
+
+        .search-result-item {
+            padding: 10px 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .search-result-item:hover,
+        .search-result-item.selected { background: #1a1a3e; }
+
+        .search-result-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+        .icon-claim { background: #2196F3; }
+        .icon-video { background: #f44336; }
+        .icon-moc { background: #9C27B0; }
+        .icon-source { background: #FF5722; }
+        .icon-scholar { background: #4CAF50; }
+        .icon-term { background: #FF9800; }
+        .icon-quote { background: #00BCD4; }
+        .icon-evidence { background: #795548; }
+        .icon-visual { background: #E91E63; }
+        .icon-location { background: #607D8B; }
+        .icon-question { background: #FFEB3B; color: #333; }
+
+        .search-result-content { flex: 1; min-width: 0; }
+        .search-result-title {
+            font-size: 0.9rem;
+            color: #fff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .search-result-subtitle {
+            font-size: 0.8rem;
+            color: #888;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .search-result-score {
+            font-size: 0.7rem;
+            color: #4a69bd;
+            background: #0f0f23;
+            padding: 2px 6px;
+            border-radius: 3px;
+            flex-shrink: 0;
+        }
+
+        .search-highlight { background: #4a69bd40; color: #fff; padding: 0 2px; border-radius: 2px; }
+
+        /* Header search button */
+        .header-search-btn {
+            background: #0f0f23;
+            border: 1px solid #333;
+            padding: 6px 12px;
+            border-radius: 6px;
+            color: #888;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+        }
+        .header-search-btn:hover { background: #1a1a3e; color: #fff; }
+        .header-search-btn svg {
+            width: 16px;
+            height: 16px;
+        }
+        .header-search-btn kbd {
+            background: #16213e;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.75rem;
+            font-family: inherit;
+        }
+
+        /* Search tab panel */
+        #search-panel {
+            padding: 20px;
+            overflow-y: auto;
+        }
+        .search-filters {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+        .search-filter-btn {
+            padding: 6px 12px;
+            background: #0f0f23;
+            border: 1px solid #333;
+            border-radius: 4px;
+            color: #888;
+            cursor: pointer;
+            font-size: 0.8rem;
+        }
+        .search-filter-btn:hover { background: #1a1a3e; color: #fff; }
+        .search-filter-btn.active { background: #4a69bd; border-color: #4a69bd; color: #fff; }
+
+        .search-results-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .search-result-card {
+            background: #16213e;
+            padding: 12px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        .search-result-card:hover { background: #1a1a3e; }
+
+        .search-panel-input {
+            width: 100%;
+            padding: 12px 16px;
+            background: #0f0f23;
+            border: 1px solid #333;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 1rem;
+            margin-bottom: 16px;
+            outline: none;
+        }
+        .search-panel-input:focus { border-color: #4a69bd; }
+        .search-panel-input::placeholder { color: #666; }
     </style>
 </head>
 <body>
     <header>
         <h1>Knowledge Base</h1>
         <div class="header-right">
+            <button class="header-search-btn" onclick="openCommandPalette()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <path d="M21 21l-4.35-4.35"></path>
+                </svg>
+                Search
+                <kbd>Ctrl+K</kbd>
+            </button>
             <span id="claim-count">0 claims</span>
             <span class="queue-badge" id="queue-badge" onclick="showQueueStatus()">Queue: 0</span>
         </div>
@@ -448,6 +661,7 @@
                 <div class="view-tab" data-view="stats">Statistics</div>
                 <div class="view-tab" data-view="library">Library</div>
                 <div class="view-tab" data-view="review">Review</div>
+                <div class="view-tab" data-view="search">Search</div>
             </div>
 
             <div class="view-content">
@@ -487,6 +701,27 @@
                         <div class="lib-section" id="lib-quotes"></div>
                         <div class="lib-section" id="lib-visuals"></div>
                         <div class="lib-section" id="lib-evidence"></div>
+                    </div>
+                </div>
+
+                <div class="view-panel" id="search-panel">
+                    <input type="text" class="search-panel-input" id="search-panel-input"
+                           placeholder="Search claims, videos, scholars, terms, locations..."
+                           oninput="handlePanelSearchInput(event)">
+                    <div class="search-filters" id="search-filters">
+                        <button class="search-filter-btn active" data-type="all" onclick="setSearchFilter('all')">All</button>
+                        <button class="search-filter-btn" data-type="claim" onclick="setSearchFilter('claim')">Claims</button>
+                        <button class="search-filter-btn" data-type="video" onclick="setSearchFilter('video')">Videos</button>
+                        <button class="search-filter-btn" data-type="moc" onclick="setSearchFilter('moc')">MOCs</button>
+                        <button class="search-filter-btn" data-type="scholar" onclick="setSearchFilter('scholar')">Scholars</button>
+                        <button class="search-filter-btn" data-type="term" onclick="setSearchFilter('term')">Terms</button>
+                        <button class="search-filter-btn" data-type="quote" onclick="setSearchFilter('quote')">Quotes</button>
+                        <button class="search-filter-btn" data-type="location" onclick="setSearchFilter('location')">Locations</button>
+                    </div>
+                    <div class="search-results-list" id="search-results-list">
+                        <p style="color:#888; text-align:center; padding:40px;">
+                            Type to search across all knowledge
+                        </p>
                     </div>
                 </div>
 
@@ -1207,6 +1442,326 @@
             // Could open a modal or detail panel
             alert(`Question: ${data.question.question}\nStatus: ${data.question.status}\nEvidence: ${data.claims.length} claims, ${data.videos.length} videos`);
         }
+
+        // ====================================================================
+        // Omni-Search / Command Palette
+        // ====================================================================
+
+        // Search state
+        let searchDebounceTimer = null;
+        let currentSearchQuery = '';
+        let currentSearchFilter = 'all';
+        let searchResults = [];
+        let selectedResultIndex = -1;
+
+        // Command Palette
+        function openCommandPalette() {
+            const overlay = document.getElementById('command-palette-overlay');
+            const input = document.getElementById('command-palette-input');
+            overlay.classList.add('open');
+            input.value = '';
+            input.focus();
+            document.getElementById('command-palette-results').innerHTML = '';
+            selectedResultIndex = -1;
+        }
+
+        function closeCommandPalette(event) {
+            if (event && event.target !== event.currentTarget) return;
+            document.getElementById('command-palette-overlay').classList.remove('open');
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            // Cmd/Ctrl + K to open command palette
+            if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+                e.preventDefault();
+                openCommandPalette();
+            }
+            // ESC to close
+            if (e.key === 'Escape') {
+                const overlay = document.getElementById('command-palette-overlay');
+                if (overlay.classList.contains('open')) {
+                    overlay.classList.remove('open');
+                }
+            }
+            // Arrow navigation in results
+            if (document.getElementById('command-palette-overlay').classList.contains('open')) {
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    navigateResults(1);
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    navigateResults(-1);
+                } else if (e.key === 'Enter' && selectedResultIndex >= 0) {
+                    e.preventDefault();
+                    selectResult(searchResults[selectedResultIndex]);
+                }
+            }
+        });
+
+        function navigateResults(direction) {
+            const items = document.querySelectorAll('.search-result-item');
+            if (items.length === 0) return;
+
+            if (selectedResultIndex >= 0 && selectedResultIndex < items.length) {
+                items[selectedResultIndex].classList.remove('selected');
+            }
+            selectedResultIndex = Math.max(0, Math.min(items.length - 1, selectedResultIndex + direction));
+            items[selectedResultIndex].classList.add('selected');
+            items[selectedResultIndex].scrollIntoView({ block: 'nearest' });
+        }
+
+        async function handleSearchInput(event) {
+            const query = event.target.value.trim();
+            currentSearchQuery = query;
+
+            if (query.length < 2) {
+                document.getElementById('command-palette-results').innerHTML = '';
+                return;
+            }
+
+            // Debounce search
+            clearTimeout(searchDebounceTimer);
+            searchDebounceTimer = setTimeout(() => performSearch(query, false), 150);
+        }
+
+        async function handlePanelSearchInput(event) {
+            const query = event.target.value.trim();
+            currentSearchQuery = query;
+
+            if (query.length < 2) {
+                document.getElementById('search-results-list').innerHTML = '<p style="color:#888; text-align:center; padding:40px;">Type to search across all knowledge</p>';
+                return;
+            }
+
+            // Debounce search
+            clearTimeout(searchDebounceTimer);
+            searchDebounceTimer = setTimeout(() => performSearch(query, true), 150);
+        }
+
+        async function performSearch(query, forPanel = false) {
+            try {
+                const typeFilter = currentSearchFilter === 'all' ? '' : `&types=${currentSearchFilter}`;
+                const res = await fetch(`/api/search?q=${encodeURIComponent(query)}${typeFilter}&limit=50`);
+                const data = await res.json();
+                searchResults = data.results;
+
+                if (forPanel) {
+                    renderSearchPanel(data);
+                } else {
+                    renderCommandPaletteResults(data);
+                }
+            } catch (err) {
+                console.error('Search failed:', err);
+            }
+        }
+
+        function renderCommandPaletteResults(data) {
+            const container = document.getElementById('command-palette-results');
+
+            if (data.results.length === 0) {
+                container.innerHTML = '<p style="padding:20px; text-align:center; color:#888;">No results found</p>';
+                return;
+            }
+
+            // Group by type
+            const grouped = {};
+            data.results.slice(0, 20).forEach(r => {
+                const type = r.result_type;
+                if (!grouped[type]) grouped[type] = [];
+                grouped[type].push(r);
+            });
+
+            let html = '';
+            let globalIdx = 0;
+            for (const [type, items] of Object.entries(grouped)) {
+                html += `<div class="search-result-group">
+                    <div class="search-result-group-header">${type}s (${items.length})</div>`;
+                items.forEach((item) => {
+                    html += renderSearchResultItem(item, globalIdx++);
+                });
+                html += '</div>';
+            }
+
+            container.innerHTML = html;
+            selectedResultIndex = -1;
+        }
+
+        function renderSearchResultItem(item, index) {
+            const typeIcons = {
+                'Claim': 'CLM', 'Video': 'VID', 'Moc': 'MOC', 'Source': 'SRC',
+                'Scholar': 'SCH', 'Term': 'TRM', 'Quote': 'QTE', 'Evidence': 'EVD',
+                'Visual': 'VIS', 'Location': 'LOC', 'Question': '?'
+            };
+            const iconClass = `icon-${item.result_type.toLowerCase()}`;
+            const highlighted = item.snippet ? item.snippet.replace(/>>>/g, '<span class="search-highlight">').replace(/<<</g, '</span>') : '';
+
+            return `
+                <div class="search-result-item" data-index="${index}" onclick="selectResult(searchResults[${index}])">
+                    <div class="search-result-icon ${iconClass}">${typeIcons[item.result_type] || '?'}</div>
+                    <div class="search-result-content">
+                        <div class="search-result-title">${escapeHtml(item.title)}</div>
+                        ${item.subtitle ? `<div class="search-result-subtitle">${escapeHtml(item.subtitle)}</div>` : ''}
+                        ${highlighted ? `<div class="search-result-subtitle">${highlighted}</div>` : ''}
+                    </div>
+                    <div class="search-result-score">${Math.round(item.score * 100)}%</div>
+                </div>
+            `;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function selectResult(item) {
+            // Close command palette if open
+            document.getElementById('command-palette-overlay').classList.remove('open');
+
+            switch (item.result_type) {
+                case 'Claim':
+                    showClaim(item.id);
+                    break;
+                case 'Video':
+                    filterByVideo(item.video_id);
+                    break;
+                case 'Moc':
+                    filterByMoc(item.id);
+                    break;
+                case 'Scholar':
+                    showScholar(item.id);
+                    break;
+                case 'Source':
+                    showSource(item.id);
+                    break;
+                case 'Location':
+                    if (item.location) {
+                        // Switch to map and focus on location
+                        document.querySelector('[data-view="map"]').click();
+                        setTimeout(() => {
+                            map.setView(item.location, 8);
+                        }, 100);
+                    }
+                    break;
+                case 'Term':
+                case 'Quote':
+                case 'Visual':
+                case 'Evidence':
+                    // Switch to library tab and filter
+                    document.querySelector('[data-view="library"]').click();
+                    const tabMap = { 'Term': 'terms', 'Quote': 'quotes', 'Visual': 'visuals', 'Evidence': 'evidence' };
+                    setTimeout(() => switchLibTab(tabMap[item.result_type]), 100);
+                    break;
+                case 'Question':
+                    showQuestion(item.id);
+                    break;
+            }
+        }
+
+        // Search Panel (dedicated tab)
+        function setSearchFilter(type) {
+            currentSearchFilter = type;
+            document.querySelectorAll('.search-filter-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.type === type);
+            });
+            if (currentSearchQuery.length >= 2) {
+                performSearch(currentSearchQuery, true);
+            }
+        }
+
+        function renderSearchPanel(data) {
+            const container = document.getElementById('search-results-list');
+
+            if (data.results.length === 0) {
+                container.innerHTML = '<p style="color:#888; text-align:center; padding:40px;">No results found</p>';
+                return;
+            }
+
+            container.innerHTML = `
+                <p style="color:#888; font-size:0.85rem; margin-bottom:12px;">Found ${data.total} results</p>
+            ` + data.results.map((item, idx) => `
+                <div class="search-result-card" onclick="selectResult(searchResults[${idx}])">
+                    <div style="display:flex; gap:12px; align-items:flex-start;">
+                        <div class="search-result-icon icon-${item.result_type.toLowerCase()}" style="flex-shrink:0;">
+                            ${item.result_type.substring(0,3).toUpperCase()}
+                        </div>
+                        <div style="flex:1; min-width:0;">
+                            <div class="search-result-title" style="font-weight:600;">${escapeHtml(item.title)}</div>
+                            ${item.subtitle ? `<div class="search-result-subtitle">${escapeHtml(item.subtitle)}</div>` : ''}
+                            ${item.snippet ? `<div style="margin-top:6px; font-size:0.85rem; color:#aaa;">${
+                                item.snippet.replace(/>>>/g, '<span class="search-highlight">').replace(/<<</g, '</span>')
+                            }</div>` : ''}
+                        </div>
+                        <div class="search-result-score">${Math.round(item.score * 100)}%</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Integration: Filter graph by search results
+        async function filterGraphBySearch(query) {
+            const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&types=claim&limit=100`);
+            const data = await res.json();
+
+            const matchingClaimIds = new Set(data.results.map(r => r.id));
+
+            // Highlight matching nodes in graph
+            if (network) {
+                const allNodes = network.body.data.nodes.get();
+                allNodes.forEach(node => {
+                    if (matchingClaimIds.has(node.id)) {
+                        network.body.data.nodes.update({ id: node.id, borderWidth: 3, color: { border: '#FFEB3B' } });
+                    } else {
+                        network.body.data.nodes.update({ id: node.id, borderWidth: 1 });
+                    }
+                });
+            }
+        }
+
+        // Integration: Filter map by search results
+        async function filterMapBySearch(query) {
+            const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&types=location&limit=100`);
+            const data = await res.json();
+
+            const matchingLocations = data.results
+                .filter(r => r.location)
+                .map(r => ({ name: r.title, lat: r.location[0], lon: r.location[1] }));
+
+            if (matchingLocations.length > 0 && map) {
+                markers.clearLayers();
+                matchingLocations.forEach(loc => {
+                    const marker = L.marker([loc.lat, loc.lon]);
+                    marker.bindPopup(`<strong>${loc.name}</strong><br>Search match`);
+                    markers.addLayer(marker);
+                });
+
+                // Fit bounds to show all matching locations
+                if (matchingLocations.length > 1) {
+                    const bounds = L.latLngBounds(matchingLocations.map(l => [l.lat, l.lon]));
+                    map.fitBounds(bounds, { padding: [50, 50] });
+                } else {
+                    map.setView([matchingLocations[0].lat, matchingLocations[0].lon], 8);
+                }
+            }
+        }
     </script>
+
+    <!-- Command Palette Overlay -->
+    <div class="command-palette-overlay" id="command-palette-overlay" onclick="closeCommandPalette(event)">
+        <div class="command-palette" onclick="event.stopPropagation()">
+            <div class="command-palette-input-container">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <path d="M21 21l-4.35-4.35"></path>
+                </svg>
+                <input type="text" class="command-palette-input" id="command-palette-input"
+                       placeholder="Search claims, videos, scholars, terms..."
+                       oninput="handleSearchInput(event)">
+                <span class="command-palette-shortcut">ESC to close</span>
+            </div>
+            <div class="command-palette-results" id="command-palette-results"></div>
+        </div>
+    </div>
 </body>
 </html>

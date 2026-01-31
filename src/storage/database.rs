@@ -1,7 +1,9 @@
 use anyhow::Result;
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, params, OptionalExtension};
 use std::path::Path;
-use super::models::{Video, Transcript, TranscriptSegment, SearchResult, SegmentMatch, Era, Region, Topic, Collection, Note, Location, MapPin, AutoTags, SavedSearch, AdvancedSearchResult, ReportEntry, GeoJsonFeature, GeoJsonGeometry, GeoJsonProperties, GeoJsonCollection, Claim, ClaimCategory, Confidence, ClaimLink, LinkType, ClaimWithLinks, TranscriptLayer, TranscriptChunk, Embedding, EmbeddingSource, SimilarityResult, HybridSearchResult, ChunkMatch, EmbeddingStats, CyclicalType, CyclicalIndicator, LoopType, RelationStrength, CausalRelation, TransmissionType, IdeaTransmission, SystemPosition, GeopoliticalEntity, SurplusFlow, BraudelTimescale, TemporalObservation, FrameworkStats, MapOfContent, MocWithClaims, QuestionStatus, ResearchQuestion, QuestionWithEvidence, DetectedPattern, PatternType, ReviewQueue, SynthesisStats, ProcessingStatus, AIProcessingQueue, SourceType, Source, Scholar, VisualType, Visual, Term, EvidenceType, Evidence, Quote};
+use std::collections::HashMap;
+use strsim::{jaro_winkler, normalized_levenshtein};
+use super::models::{Video, Transcript, TranscriptSegment, SearchResult, SegmentMatch, Era, Region, Topic, Collection, Note, Location, MapPin, AutoTags, SavedSearch, AdvancedSearchResult, ReportEntry, GeoJsonFeature, GeoJsonGeometry, GeoJsonProperties, GeoJsonCollection, Claim, ClaimCategory, Confidence, ClaimLink, LinkType, ClaimWithLinks, TranscriptLayer, TranscriptChunk, Embedding, EmbeddingSource, SimilarityResult, HybridSearchResult, ChunkMatch, EmbeddingStats, CyclicalType, CyclicalIndicator, LoopType, RelationStrength, CausalRelation, TransmissionType, IdeaTransmission, SystemPosition, GeopoliticalEntity, SurplusFlow, BraudelTimescale, TemporalObservation, FrameworkStats, MapOfContent, MocWithClaims, QuestionStatus, ResearchQuestion, QuestionWithEvidence, DetectedPattern, PatternType, ReviewQueue, SynthesisStats, ProcessingStatus, AIProcessingQueue, SourceType, Source, Scholar, VisualType, Visual, Term, EvidenceType, Evidence, Quote, SearchResultType, UnifiedSearchResult, SearchResponse, SearchFacets};
 use chrono::{DateTime, NaiveDate, Utc};
 
 pub struct Database {
@@ -801,6 +803,665 @@ impl Database {
         }
 
         Ok(results)
+    }
+
+    // ========================================================================
+    // Unified Fuzzy Search
+    // ========================================================================
+
+    /// Unified search across all entity types with fuzzy matching
+    pub fn unified_search(
+        &self,
+        query: &str,
+        types: Option<&[&str]>,
+        video_filter: Option<&str>,
+        limit: usize,
+        fuzzy_threshold: f64,
+    ) -> Result<SearchResponse> {
+        let query_lower = query.to_lowercase();
+        let query_words: Vec<&str> = query_lower.split_whitespace().collect();
+        let mut all_results = Vec::new();
+
+        // Define which types to search
+        let default_types = ["claim", "video", "moc", "source", "scholar",
+            "term", "quote", "evidence", "visual", "location", "question"];
+        let search_types = types.unwrap_or(&default_types);
+
+        for search_type in search_types {
+            match *search_type {
+                "claim" => all_results.extend(self.search_claims_fuzzy(&query_lower, &query_words, video_filter, fuzzy_threshold)?),
+                "video" => all_results.extend(self.search_videos_fuzzy(&query_lower, &query_words, fuzzy_threshold)?),
+                "moc" => all_results.extend(self.search_mocs_fuzzy(&query_lower, &query_words, fuzzy_threshold)?),
+                "source" => all_results.extend(self.search_sources_fuzzy(&query_lower, &query_words, fuzzy_threshold)?),
+                "scholar" => all_results.extend(self.search_scholars_fuzzy(&query_lower, &query_words, fuzzy_threshold)?),
+                "term" => all_results.extend(self.search_terms_fuzzy(&query_lower, &query_words, video_filter, fuzzy_threshold)?),
+                "quote" => all_results.extend(self.search_quotes_fuzzy(&query_lower, &query_words, video_filter, fuzzy_threshold)?),
+                "evidence" => all_results.extend(self.search_evidence_fuzzy(&query_lower, &query_words, video_filter, fuzzy_threshold)?),
+                "visual" => all_results.extend(self.search_visuals_fuzzy(&query_lower, &query_words, video_filter, fuzzy_threshold)?),
+                "location" => all_results.extend(self.search_locations_fuzzy(&query_lower, &query_words, fuzzy_threshold)?),
+                "question" => all_results.extend(self.search_questions_fuzzy(&query_lower, &query_words, fuzzy_threshold)?),
+                _ => {}
+            }
+        }
+
+        // Sort by score descending
+        all_results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+
+        // Build facets
+        let facets = self.build_search_facets(&all_results)?;
+
+        let total = all_results.len();
+        all_results.truncate(limit);
+
+        Ok(SearchResponse {
+            query: query.to_string(),
+            total,
+            results: all_results,
+            facets,
+        })
+    }
+
+    /// Calculate fuzzy match score combining multiple algorithms
+    fn fuzzy_score(&self, query: &str, text: &str, query_words: &[&str]) -> f64 {
+        let text_lower = text.to_lowercase();
+
+        // Exact substring match bonus
+        if text_lower.contains(query) {
+            return 1.0;
+        }
+
+        // Word-level matching using Jaro-Winkler
+        let text_words: Vec<&str> = text_lower.split_whitespace().collect();
+        let mut word_score = 0.0;
+        let mut matched_words = 0;
+
+        for qword in query_words {
+            let best_match = text_words.iter()
+                .map(|tw| jaro_winkler(qword, tw))
+                .max_by(|a, b| a.partial_cmp(b).unwrap())
+                .unwrap_or(0.0);
+            if best_match > 0.8 {
+                matched_words += 1;
+                word_score += best_match;
+            }
+        }
+
+        // Combine word matching with overall similarity
+        let overall = normalized_levenshtein(query, &text_lower);
+        let word_ratio = if !query_words.is_empty() {
+            matched_words as f64 / query_words.len() as f64
+        } else {
+            0.0
+        };
+
+        // Weighted combination: word matching is most important
+        let word_component = if !query_words.is_empty() {
+            word_score / query_words.len() as f64
+        } else {
+            0.0
+        };
+        word_component * 0.6 + overall * 0.2 + word_ratio * 0.2
+    }
+
+    /// Highlight matching words in text
+    fn highlight_match(&self, text: &str, query_words: &[&str]) -> String {
+        let mut result = text.to_string();
+        for word in query_words {
+            // Simple case-insensitive highlighting
+            let lower = result.to_lowercase();
+            if let Some(pos) = lower.find(word) {
+                let end = pos + word.len();
+                let matched = &result[pos..end];
+                result = format!("{}>>>{}<<<{}", &result[..pos], matched, &result[end..]);
+            }
+        }
+        self.truncate_snippet(&result, 200)
+    }
+
+    fn truncate_snippet(&self, text: &str, max_len: usize) -> String {
+        if text.len() <= max_len {
+            text.to_string()
+        } else {
+            format!("{}...", &text.chars().take(max_len).collect::<String>())
+        }
+    }
+
+    /// Search claims with fuzzy matching
+    fn search_claims_fuzzy(
+        &self,
+        query: &str,
+        query_words: &[&str],
+        video_filter: Option<&str>,
+        threshold: f64,
+    ) -> Result<Vec<UnifiedSearchResult>> {
+        let sql = if video_filter.is_some() {
+            "SELECT id, text, video_id, timestamp, source_quote, category FROM claims WHERE video_id = ?1"
+        } else {
+            "SELECT id, text, video_id, timestamp, source_quote, category FROM claims"
+        };
+
+        let mut stmt = self.conn.prepare(sql)?;
+        let mut rows = if let Some(vid) = video_filter {
+            stmt.query(params![vid])?
+        } else {
+            stmt.query([])?
+        };
+
+        let mut results = Vec::new();
+        while let Some(row) = rows.next()? {
+            let id: i64 = row.get(0)?;
+            let text: String = row.get(1)?;
+            let video_id: String = row.get(2)?;
+            let timestamp: Option<f64> = row.get(3)?;
+            let source_quote: String = row.get(4)?;
+            let category: String = row.get(5)?;
+
+            // Score against both text and source_quote
+            let text_score = self.fuzzy_score(query, &text, query_words);
+            let quote_score = self.fuzzy_score(query, &source_quote, query_words);
+            let score = text_score.max(quote_score);
+
+            if score >= threshold {
+                results.push(UnifiedSearchResult {
+                    result_type: SearchResultType::Claim,
+                    id,
+                    title: self.truncate_snippet(&text, 100),
+                    subtitle: Some(format!("{} | {}", category, video_id)),
+                    snippet: Some(self.highlight_match(&source_quote, query_words)),
+                    score,
+                    video_id: Some(video_id),
+                    timestamp,
+                    location: None,
+                });
+            }
+        }
+        Ok(results)
+    }
+
+    /// Search videos with fuzzy matching
+    fn search_videos_fuzzy(
+        &self,
+        query: &str,
+        query_words: &[&str],
+        threshold: f64,
+    ) -> Result<Vec<UnifiedSearchResult>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, title, channel, description FROM videos"
+        )?;
+        let mut rows = stmt.query([])?;
+        let mut results = Vec::new();
+
+        while let Some(row) = rows.next()? {
+            let id: String = row.get(0)?;
+            let title: String = row.get(1)?;
+            let channel: Option<String> = row.get(2)?;
+            let description: Option<String> = row.get(3)?;
+
+            let title_score = self.fuzzy_score(query, &title, query_words);
+            let desc_score = description.as_ref()
+                .map(|d| self.fuzzy_score(query, d, query_words) * 0.8)
+                .unwrap_or(0.0);
+            let score = title_score.max(desc_score);
+
+            if score >= threshold {
+                results.push(UnifiedSearchResult {
+                    result_type: SearchResultType::Video,
+                    id: 0, // Videos use string IDs, store in video_id
+                    title,
+                    subtitle: channel,
+                    snippet: description.map(|d| self.truncate_snippet(&d, 100)),
+                    score,
+                    video_id: Some(id),
+                    timestamp: None,
+                    location: None,
+                });
+            }
+        }
+        Ok(results)
+    }
+
+    /// Search MOCs with fuzzy matching
+    fn search_mocs_fuzzy(
+        &self,
+        query: &str,
+        query_words: &[&str],
+        threshold: f64,
+    ) -> Result<Vec<UnifiedSearchResult>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, title, description FROM mocs"
+        )?;
+        let mut rows = stmt.query([])?;
+        let mut results = Vec::new();
+
+        while let Some(row) = rows.next()? {
+            let id: i64 = row.get(0)?;
+            let title: String = row.get(1)?;
+            let description: Option<String> = row.get(2)?;
+
+            let title_score = self.fuzzy_score(query, &title, query_words);
+            let desc_score = description.as_ref()
+                .map(|d| self.fuzzy_score(query, d, query_words) * 0.7)
+                .unwrap_or(0.0);
+            let score = title_score.max(desc_score);
+
+            if score >= threshold {
+                results.push(UnifiedSearchResult {
+                    result_type: SearchResultType::Moc,
+                    id,
+                    title,
+                    subtitle: None,
+                    snippet: description.map(|d| self.truncate_snippet(&d, 100)),
+                    score,
+                    video_id: None,
+                    timestamp: None,
+                    location: None,
+                });
+            }
+        }
+        Ok(results)
+    }
+
+    /// Search sources with fuzzy matching
+    fn search_sources_fuzzy(
+        &self,
+        query: &str,
+        query_words: &[&str],
+        threshold: f64,
+    ) -> Result<Vec<UnifiedSearchResult>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, title, author, source_type, notes FROM sources"
+        )?;
+        let mut rows = stmt.query([])?;
+        let mut results = Vec::new();
+
+        while let Some(row) = rows.next()? {
+            let id: i64 = row.get(0)?;
+            let title: String = row.get(1)?;
+            let author: Option<String> = row.get(2)?;
+            let source_type: String = row.get(3)?;
+            let notes: Option<String> = row.get(4)?;
+
+            let title_score = self.fuzzy_score(query, &title, query_words);
+            let author_score = author.as_ref()
+                .map(|a| self.fuzzy_score(query, a, query_words) * 0.8)
+                .unwrap_or(0.0);
+            let notes_score = notes.as_ref()
+                .map(|n| self.fuzzy_score(query, n, query_words) * 0.6)
+                .unwrap_or(0.0);
+            let score = title_score.max(author_score).max(notes_score);
+
+            if score >= threshold {
+                results.push(UnifiedSearchResult {
+                    result_type: SearchResultType::Source,
+                    id,
+                    title,
+                    subtitle: Some(format!("{}{}", source_type, author.map(|a| format!(" by {}", a)).unwrap_or_default())),
+                    snippet: notes.map(|n| self.truncate_snippet(&n, 100)),
+                    score,
+                    video_id: None,
+                    timestamp: None,
+                    location: None,
+                });
+            }
+        }
+        Ok(results)
+    }
+
+    /// Search scholars with fuzzy matching
+    fn search_scholars_fuzzy(
+        &self,
+        query: &str,
+        query_words: &[&str],
+        threshold: f64,
+    ) -> Result<Vec<UnifiedSearchResult>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, field, contribution FROM scholars"
+        )?;
+        let mut rows = stmt.query([])?;
+        let mut results = Vec::new();
+
+        while let Some(row) = rows.next()? {
+            let id: i64 = row.get(0)?;
+            let name: String = row.get(1)?;
+            let field: Option<String> = row.get(2)?;
+            let contribution: Option<String> = row.get(3)?;
+
+            let name_score = self.fuzzy_score(query, &name, query_words);
+            let contrib_score = contribution.as_ref()
+                .map(|c| self.fuzzy_score(query, c, query_words) * 0.7)
+                .unwrap_or(0.0);
+            let score = name_score.max(contrib_score);
+
+            if score >= threshold {
+                results.push(UnifiedSearchResult {
+                    result_type: SearchResultType::Scholar,
+                    id,
+                    title: name,
+                    subtitle: field,
+                    snippet: contribution,
+                    score,
+                    video_id: None,
+                    timestamp: None,
+                    location: None,
+                });
+            }
+        }
+        Ok(results)
+    }
+
+    /// Search terms with fuzzy matching
+    fn search_terms_fuzzy(
+        &self,
+        query: &str,
+        query_words: &[&str],
+        video_filter: Option<&str>,
+        threshold: f64,
+    ) -> Result<Vec<UnifiedSearchResult>> {
+        let sql = if video_filter.is_some() {
+            "SELECT id, term, definition, domain, video_id, timestamp FROM terms WHERE video_id = ?1"
+        } else {
+            "SELECT id, term, definition, domain, video_id, timestamp FROM terms"
+        };
+
+        let mut stmt = self.conn.prepare(sql)?;
+        let mut rows = if let Some(vid) = video_filter {
+            stmt.query(params![vid])?
+        } else {
+            stmt.query([])?
+        };
+        let mut results = Vec::new();
+
+        while let Some(row) = rows.next()? {
+            let id: i64 = row.get(0)?;
+            let term: String = row.get(1)?;
+            let definition: String = row.get(2)?;
+            let domain: Option<String> = row.get(3)?;
+            let video_id: Option<String> = row.get(4)?;
+            let timestamp: Option<f64> = row.get(5)?;
+
+            let term_score = self.fuzzy_score(query, &term, query_words);
+            let def_score = self.fuzzy_score(query, &definition, query_words) * 0.8;
+            let score = term_score.max(def_score);
+
+            if score >= threshold {
+                results.push(UnifiedSearchResult {
+                    result_type: SearchResultType::Term,
+                    id,
+                    title: term,
+                    subtitle: domain,
+                    snippet: Some(self.truncate_snippet(&definition, 150)),
+                    score,
+                    video_id,
+                    timestamp,
+                    location: None,
+                });
+            }
+        }
+        Ok(results)
+    }
+
+    /// Search quotes with fuzzy matching
+    fn search_quotes_fuzzy(
+        &self,
+        query: &str,
+        query_words: &[&str],
+        video_filter: Option<&str>,
+        threshold: f64,
+    ) -> Result<Vec<UnifiedSearchResult>> {
+        let sql = if video_filter.is_some() {
+            "SELECT id, text, speaker, video_id, timestamp, context FROM quotes WHERE video_id = ?1"
+        } else {
+            "SELECT id, text, speaker, video_id, timestamp, context FROM quotes"
+        };
+
+        let mut stmt = self.conn.prepare(sql)?;
+        let mut rows = if let Some(vid) = video_filter {
+            stmt.query(params![vid])?
+        } else {
+            stmt.query([])?
+        };
+        let mut results = Vec::new();
+
+        while let Some(row) = rows.next()? {
+            let id: i64 = row.get(0)?;
+            let text: String = row.get(1)?;
+            let speaker: Option<String> = row.get(2)?;
+            let video_id: String = row.get(3)?;
+            let timestamp: Option<f64> = row.get(4)?;
+            let context: Option<String> = row.get(5)?;
+
+            let text_score = self.fuzzy_score(query, &text, query_words);
+            let speaker_score = speaker.as_ref()
+                .map(|s| self.fuzzy_score(query, s, query_words) * 0.9)
+                .unwrap_or(0.0);
+            let score = text_score.max(speaker_score);
+
+            if score >= threshold {
+                results.push(UnifiedSearchResult {
+                    result_type: SearchResultType::Quote,
+                    id,
+                    title: self.truncate_snippet(&text, 100),
+                    subtitle: speaker.map(|s| format!("— {}", s)),
+                    snippet: context,
+                    score,
+                    video_id: Some(video_id),
+                    timestamp,
+                    location: None,
+                });
+            }
+        }
+        Ok(results)
+    }
+
+    /// Search evidence with fuzzy matching
+    fn search_evidence_fuzzy(
+        &self,
+        query: &str,
+        query_words: &[&str],
+        video_filter: Option<&str>,
+        threshold: f64,
+    ) -> Result<Vec<UnifiedSearchResult>> {
+        let sql = if video_filter.is_some() {
+            "SELECT id, video_id, description, evidence_type, timestamp FROM evidence WHERE video_id = ?1"
+        } else {
+            "SELECT id, video_id, description, evidence_type, timestamp FROM evidence"
+        };
+
+        let mut stmt = self.conn.prepare(sql)?;
+        let mut rows = if let Some(vid) = video_filter {
+            stmt.query(params![vid])?
+        } else {
+            stmt.query([])?
+        };
+        let mut results = Vec::new();
+
+        while let Some(row) = rows.next()? {
+            let id: i64 = row.get(0)?;
+            let video_id: String = row.get(1)?;
+            let description: String = row.get(2)?;
+            let evidence_type: String = row.get(3)?;
+            let timestamp: Option<f64> = row.get(4)?;
+
+            let score = self.fuzzy_score(query, &description, query_words);
+
+            if score >= threshold {
+                results.push(UnifiedSearchResult {
+                    result_type: SearchResultType::Evidence,
+                    id,
+                    title: self.truncate_snippet(&description, 100),
+                    subtitle: Some(evidence_type),
+                    snippet: None,
+                    score,
+                    video_id: Some(video_id),
+                    timestamp,
+                    location: None,
+                });
+            }
+        }
+        Ok(results)
+    }
+
+    /// Search visuals with fuzzy matching
+    fn search_visuals_fuzzy(
+        &self,
+        query: &str,
+        query_words: &[&str],
+        video_filter: Option<&str>,
+        threshold: f64,
+    ) -> Result<Vec<UnifiedSearchResult>> {
+        let sql = if video_filter.is_some() {
+            "SELECT id, video_id, description, visual_type, timestamp, significance FROM visuals WHERE video_id = ?1"
+        } else {
+            "SELECT id, video_id, description, visual_type, timestamp, significance FROM visuals"
+        };
+
+        let mut stmt = self.conn.prepare(sql)?;
+        let mut rows = if let Some(vid) = video_filter {
+            stmt.query(params![vid])?
+        } else {
+            stmt.query([])?
+        };
+        let mut results = Vec::new();
+
+        while let Some(row) = rows.next()? {
+            let id: i64 = row.get(0)?;
+            let video_id: String = row.get(1)?;
+            let description: String = row.get(2)?;
+            let visual_type: String = row.get(3)?;
+            let timestamp: f64 = row.get(4)?;
+            let significance: Option<String> = row.get(5)?;
+
+            let desc_score = self.fuzzy_score(query, &description, query_words);
+            let sig_score = significance.as_ref()
+                .map(|s| self.fuzzy_score(query, s, query_words) * 0.7)
+                .unwrap_or(0.0);
+            let score = desc_score.max(sig_score);
+
+            if score >= threshold {
+                results.push(UnifiedSearchResult {
+                    result_type: SearchResultType::Visual,
+                    id,
+                    title: self.truncate_snippet(&description, 100),
+                    subtitle: Some(visual_type),
+                    snippet: significance,
+                    score,
+                    video_id: Some(video_id),
+                    timestamp: Some(timestamp),
+                    location: None,
+                });
+            }
+        }
+        Ok(results)
+    }
+
+    /// Search locations with fuzzy matching
+    fn search_locations_fuzzy(
+        &self,
+        query: &str,
+        query_words: &[&str],
+        threshold: f64,
+    ) -> Result<Vec<UnifiedSearchResult>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, lat, lon FROM locations"
+        )?;
+        let mut rows = stmt.query([])?;
+        let mut results = Vec::new();
+
+        while let Some(row) = rows.next()? {
+            let id: i64 = row.get(0)?;
+            let name: String = row.get(1)?;
+            let lat: f64 = row.get(2)?;
+            let lon: f64 = row.get(3)?;
+
+            let score = self.fuzzy_score(query, &name, query_words);
+
+            if score >= threshold {
+                results.push(UnifiedSearchResult {
+                    result_type: SearchResultType::Location,
+                    id,
+                    title: name,
+                    subtitle: Some(format!("{:.4}, {:.4}", lat, lon)),
+                    snippet: None,
+                    score,
+                    video_id: None,
+                    timestamp: None,
+                    location: Some((lat, lon)),
+                });
+            }
+        }
+        Ok(results)
+    }
+
+    /// Search research questions with fuzzy matching
+    fn search_questions_fuzzy(
+        &self,
+        query: &str,
+        query_words: &[&str],
+        threshold: f64,
+    ) -> Result<Vec<UnifiedSearchResult>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, question, notes, status FROM research_questions"
+        )?;
+        let mut rows = stmt.query([])?;
+        let mut results = Vec::new();
+
+        while let Some(row) = rows.next()? {
+            let id: i64 = row.get(0)?;
+            let question: String = row.get(1)?;
+            let notes: Option<String> = row.get(2)?;
+            let status: String = row.get(3)?;
+
+            let q_score = self.fuzzy_score(query, &question, query_words);
+            let notes_score = notes.as_ref()
+                .map(|n| self.fuzzy_score(query, n, query_words) * 0.6)
+                .unwrap_or(0.0);
+            let score = q_score.max(notes_score);
+
+            if score >= threshold {
+                results.push(UnifiedSearchResult {
+                    result_type: SearchResultType::Question,
+                    id,
+                    title: self.truncate_snippet(&question, 100),
+                    subtitle: Some(status),
+                    snippet: notes.map(|n| self.truncate_snippet(&n, 100)),
+                    score,
+                    video_id: None,
+                    timestamp: None,
+                    location: None,
+                });
+            }
+        }
+        Ok(results)
+    }
+
+    /// Build search facets from results
+    fn build_search_facets(&self, results: &[UnifiedSearchResult]) -> Result<SearchFacets> {
+        let mut type_counts: HashMap<SearchResultType, usize> = HashMap::new();
+        let mut video_counts: HashMap<String, usize> = HashMap::new();
+
+        for result in results {
+            *type_counts.entry(result.result_type).or_insert(0) += 1;
+            if let Some(ref vid) = result.video_id {
+                *video_counts.entry(vid.clone()).or_insert(0) += 1;
+            }
+        }
+
+        // Get video titles for facets
+        let mut video_facets = Vec::new();
+        for (vid, count) in video_counts {
+            if let Some(video) = self.get_video(&vid)? {
+                video_facets.push((vid, video.title, count));
+            }
+        }
+        video_facets.sort_by(|a, b| b.2.cmp(&a.2));
+
+        let mut types_vec: Vec<(SearchResultType, usize)> = type_counts.into_iter().collect();
+        types_vec.sort_by(|a, b| b.1.cmp(&a.1));
+
+        Ok(SearchFacets {
+            types: types_vec,
+            videos: video_facets,
+        })
     }
 
     fn row_to_video(&self, row: &rusqlite::Row) -> Result<Video> {
@@ -2161,6 +2822,20 @@ impl Database {
 
         let mut claims = Vec::new();
         let mut rows = stmt.query([])?;
+
+        while let Some(row) = rows.next()? {
+            claims.push(self.row_to_claim(row)?);
+        }
+        Ok(claims)
+    }
+
+    pub fn get_all_claims_limited(&self, limit: usize) -> Result<Vec<Claim>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, text, video_id, timestamp, source_quote, category, confidence, created_at FROM claims ORDER BY created_at DESC LIMIT ?1"
+        )?;
+
+        let mut claims = Vec::new();
+        let mut rows = stmt.query(params![limit as i64])?;
 
         while let Some(row) = rows.next()? {
             claims.push(self.row_to_claim(row)?);
@@ -4467,6 +5142,29 @@ impl Database {
         url: Option<&str>,
         notes: Option<&str>,
     ) -> Result<i64> {
+        // Check if source already exists (match by title and author)
+        let existing: Option<i64> = self.conn.query_row(
+            "SELECT id FROM sources WHERE title = ?1 AND (author = ?2 OR (author IS NULL AND ?2 IS NULL))",
+            params![title, author],
+            |row| row.get(0),
+        ).optional()?;
+
+        if let Some(id) = existing {
+            // Update fields if new values provided (upsert behavior)
+            if year.is_some() || url.is_some() || notes.is_some() {
+                self.conn.execute(
+                    "UPDATE sources SET
+                        year = COALESCE(?1, year),
+                        url = COALESCE(?2, url),
+                        notes = COALESCE(?3, notes)
+                     WHERE id = ?4",
+                    params![year, url, notes, id],
+                )?;
+            }
+            return Ok(id);
+        }
+
+        // Insert new source
         self.conn.execute(
             r#"
             INSERT INTO sources (title, author, source_type, year, url, notes, created_at)
@@ -4569,6 +5267,29 @@ impl Database {
         era: Option<&str>,
         contribution: Option<&str>,
     ) -> Result<i64> {
+        // Check if scholar already exists (match by name)
+        let existing: Option<i64> = self.conn.query_row(
+            "SELECT id FROM scholars WHERE name = ?1",
+            params![name],
+            |row| row.get(0),
+        ).optional()?;
+
+        if let Some(id) = existing {
+            // Update fields if new values provided (upsert behavior)
+            if field.is_some() || era.is_some() || contribution.is_some() {
+                self.conn.execute(
+                    "UPDATE scholars SET
+                        field = COALESCE(?1, field),
+                        era = COALESCE(?2, era),
+                        contribution = COALESCE(?3, contribution)
+                     WHERE id = ?4",
+                    params![field, era, contribution, id],
+                )?;
+            }
+            return Ok(id);
+        }
+
+        // Insert new scholar
         self.conn.execute(
             r#"
             INSERT INTO scholars (name, field, era, contribution, created_at)
@@ -4719,6 +5440,20 @@ impl Database {
         timestamp: Option<f64>,
         scholar_id: Option<i64>,
     ) -> Result<i64> {
+        // Check if term already exists (match by term name, case-insensitive)
+        let existing: Option<i64> = self.conn.query_row(
+            "SELECT id FROM terms WHERE LOWER(term) = LOWER(?1)",
+            params![term],
+            |row| row.get(0),
+        ).optional()?;
+
+        if let Some(id) = existing {
+            // Optionally update definition if new one is longer/better
+            // For now, just return existing ID
+            return Ok(id);
+        }
+
+        // Insert new term
         self.conn.execute(
             r#"
             INSERT INTO terms (term, definition, domain, video_id, timestamp, scholar_id, created_at)

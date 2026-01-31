@@ -13,3 +13,4 @@ anyhow = "1"
 chrono = { version = "0.4", features = ["serde"] }
 axum = "0.7"
 tower-http = { version = "0.5", features = ["cors", "fs"] }
+strsim = "0.11"

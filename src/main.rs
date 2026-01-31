@@ -1816,6 +1816,15 @@ fn cmd_serve(db_path: PathBuf, port: u16) -> Result<()> {
         topic: Option<String>,
     }
 
+    #[derive(serde::Deserialize)]
+    struct SearchQuery {
+        q: String,                      // Search query
+        types: Option<String>,          // Comma-separated: "claim,video,scholar"
+        video_id: Option<String>,       // Filter to specific video
+        limit: Option<usize>,           // Max results (default 50)
+        fuzzy_threshold: Option<f64>,   // 0.0-1.0, default 0.6
+    }
+
     // Graph node/edge structures for vis.js
     #[derive(serde::Serialize)]
     struct GraphNode {
@@ -2026,8 +2035,8 @@ fn cmd_serve(db_path: PathBuf, port: u16) -> Result<()> {
             }
             topic_claims
         } else {
-            // Default: get recent claims
-            db.get_random_claims(50).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            // Default: get all claims (limited to 500 for performance)
+            db.get_all_claims_limited(500).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         };
 
         let claim_ids: std::collections::HashSet<i64> = claims.iter().map(|c| c.id).collect();
@@ -2293,6 +2302,27 @@ fn cmd_serve(db_path: PathBuf, port: u16) -> Result<()> {
         Ok(Json(quotes))
     }
 
+    async fn search(
+        State(state): State<Arc<AppState>>,
+        Query(q): Query<SearchQuery>,
+    ) -> Result<Json<engine::SearchResponse>, StatusCode> {
+        let db = open_db(&state)?;
+
+        // Parse comma-separated types
+        let types: Option<Vec<&str>> = q.types.as_ref()
+            .map(|t| t.split(',').map(|s| s.trim()).collect());
+
+        let results = db.unified_search(
+            &q.q,
+            types.as_deref(),
+            q.video_id.as_deref(),
+            q.limit.unwrap_or(50),
+            q.fuzzy_threshold.unwrap_or(0.6),
+        ).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        Ok(Json(results))
+    }
+
     async fn get_index() -> axum::response::Html<&'static str> {
         axum::response::Html(include_str!("../static/index.html"))
     }
@@ -2323,6 +2353,8 @@ fn cmd_serve(db_path: PathBuf, port: u16) -> Result<()> {
         .route("/api/visuals", get(get_visuals))
         .route("/api/evidence", get(get_evidence))
         .route("/api/quotes", get(get_quotes))
+        // Unified search endpoint
+        .route("/api/search", get(search))
         .layer(CorsLayer::permissive())
         .with_state(state);
 

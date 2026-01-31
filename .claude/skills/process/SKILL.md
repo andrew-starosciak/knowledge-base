@@ -1,21 +1,29 @@
 ---
 name: process
-description: Process videos from AI queue - extract claims, tag eras/regions, map locations, apply frameworks, organize with MOCs
+description: Process videos from AI queue - extract claims, sources, scholars, visuals, terms, evidence, quotes, apply frameworks, organize with MOCs
 allowed-tools: Bash(./target/release/engine *), Bash(./target/debug/engine *), Bash(cargo run -- *), Read, Grep
 ---
 
 # AI Claim Extraction & Synthesis Processor
 
-You are processing videos from the Historical Synthesis Engine's AI queue. Your job is to:
+You are processing videos from the Historical Synthesis Engine's AI queue. Your job is to COMPREHENSIVELY extract knowledge including:
 1. Tag videos with era and geographic region
-2. Extract atomic claims from transcripts
-3. Apply analytical frameworks
-4. Extract locations for map visualization
-5. Organize claims into Maps of Content
-6. Generate research questions
+2. Extract atomic claims from transcripts (aim for 50-100 per hour of content)
+3. Extract sources (books, papers, documentaries mentioned)
+4. Extract scholars (thinkers, researchers referenced)
+5. Extract visuals (images, diagrams, artifacts described)
+6. Extract terms (definitions, concepts explained)
+7. Extract evidence (archaeological, genetic, textual evidence cited)
+8. Extract quotes (notable statements)
+9. Apply analytical frameworks
+10. Extract locations for map visualization
+11. Organize claims into Maps of Content
+12. Generate research questions
+
+**IMPORTANT: Extract EVERYTHING. A 1-hour lecture should yield 50+ claims, 5+ sources, 10+ scholars, 10+ visuals, 10+ terms, 10+ pieces of evidence, and 5+ quotes. When in doubt, extract it.**
 
 ## Current Queue Status
-!`./target/debug/engine queue 2>/dev/null || cargo run -- queue 2>/dev/null`
+!`./target/debug/engine -d data/knowledge.db queue 2>/dev/null || cargo run -- -d data/knowledge.db queue 2>/dev/null`
 
 ## Processing Workflow
 
@@ -25,24 +33,45 @@ For each pending video, follow ALL these steps:
 
 ### Step 1: Mark as In-Progress
 ```bash
-./target/debug/engine queue-start <video-id>
+./target/debug/engine -d data/knowledge.db queue-start <video-id>
 ```
 
 ---
 
 ### Step 2: Export and Read the Transcript
 ```bash
-./target/debug/engine export-transcript <video-id>
+./target/debug/engine -d data/knowledge.db export-transcript <video-id>
 ```
 
-Read carefully, identifying:
-- Historical era and geographic region covered
+Read carefully, identifying ALL of the following:
+
+**Claims & Arguments:**
 - Factual statements with timestamps
 - Causal claims (X causes Y)
 - Cyclical patterns (recurring historical dynamics)
 - Ideas being transmitted between cultures
 - Geopolitical dynamics (core/periphery)
+
+**Sources & Scholars:**
+- Books, papers, documentaries mentioned
+- Scholars, thinkers, researchers referenced (with their contributions)
+
+**Visual Content:**
+- Images, paintings, diagrams being discussed
+- Artifacts, skeletons, archaeological remains shown
+- Maps, charts, or symbols displayed
+
+**Definitions & Evidence:**
+- Key terms and concepts being defined
+- Archaeological evidence cited
+- Genetic/DNA evidence mentioned
+- Textual/historical evidence referenced
+- Scientific studies or findings
+
+**Context:**
+- Historical era and geographic region covered
 - Specific locations mentioned (cities, sites, regions)
+- Notable quotes or statements
 
 ---
 
@@ -51,7 +80,7 @@ Read carefully, identifying:
 Based on the transcript content, tag the video with its historical era and geographic region:
 
 ```bash
-./target/debug/engine tag <video-id> --era "<era>" --region "<region>"
+./target/debug/engine -d data/knowledge.db tag <video-id> --era "<era>" --region "<region>"
 ```
 
 **Available Eras:**
@@ -70,7 +99,7 @@ Based on the transcript content, tag the video with its historical era and geogr
 
 Check existing regions:
 ```bash
-./target/debug/engine regions
+./target/debug/engine -d data/knowledge.db regions
 ```
 
 ---
@@ -80,7 +109,7 @@ Check existing regions:
 For each significant claim:
 
 ```bash
-./target/debug/engine add-claim <video-id> "claim text" \
+./target/debug/engine -d data/knowledge.db add-claim <video-id> "claim text" \
   --quote "exact source quote" \
   --category <category> \
   --confidence <high|medium|low> \
@@ -97,10 +126,115 @@ For each significant claim:
 - `metaphysical` - Claims about nature of reality
 
 **Guidelines:**
-- Aim for 10-30 claims per video
+- **Aim for 50-100 claims per hour of video content**
 - Each claim = one atomic idea
 - Always include source quote
 - Convert MM:SS to seconds for --at
+- Extract micro-claims, not just major theses
+- If someone makes 3 related points, that's 3 claims
+
+---
+
+### Step 4b: Extract Sources
+
+For every book, paper, documentary, or article mentioned:
+
+```bash
+./target/debug/engine -d data/knowledge.db add-source "Title" \
+  --author "Author Name" \
+  -t <book|paper|documentary|article|lecture> \
+  -y <year>
+
+# Then cite it in the video:
+./target/debug/engine -d data/knowledge.db cite-source <video-id> <source-id> --at <timestamp> --context "How it was referenced"
+```
+
+Check existing sources first:
+```bash
+./target/debug/engine -d data/knowledge.db sources
+```
+
+---
+
+### Step 4c: Extract Scholars
+
+For every scholar, thinker, or researcher mentioned:
+
+```bash
+./target/debug/engine -d data/knowledge.db add-scholar "Name" \
+  --field "Philosophy" \
+  --era "19th century" \
+  --contribution "Brief summary of their contribution"
+
+# Then cite them in the video:
+./target/debug/engine -d data/knowledge.db cite-scholar <video-id> <scholar-id> --at <timestamp> --context "What was said about them"
+```
+
+Check existing scholars first:
+```bash
+./target/debug/engine -d data/knowledge.db scholars
+```
+
+---
+
+### Step 4d: Extract Visuals
+
+For every image, diagram, artifact, or visual described:
+
+```bash
+./target/debug/engine -d data/knowledge.db add-visual <video-id> "Description of visual" \
+  --at <timestamp> \
+  -t <painting|map|diagram|artifact|chart|photo|skeleton|symbol|architecture|inscription> \
+  --significance "Why this visual matters" \
+  --location "Place name" \
+  --era "Prehistoric"
+```
+
+---
+
+### Step 4e: Extract Terms & Definitions
+
+For every term or concept that is defined or explained:
+
+```bash
+./target/debug/engine -d data/knowledge.db define "Term" "Definition text" \
+  --domain <philosophy|archaeology|religion|sociology|anthropology|history> \
+  --video <video-id> \
+  --at <timestamp> \
+  --scholar "Scholar who coined it"
+```
+
+Check existing terms:
+```bash
+./target/debug/engine -d data/knowledge.db terms
+```
+
+---
+
+### Step 4f: Extract Evidence
+
+For every piece of evidence cited (archaeological finds, DNA studies, etc.):
+
+```bash
+./target/debug/engine -d data/knowledge.db add-evidence <video-id> "Description of evidence" \
+  -t <archaeological|genetic|textual|anthropological|linguistic|artistic|scientific|historical> \
+  --at <timestamp> \
+  --location "Where found" \
+  --era "Time period"
+```
+
+---
+
+### Step 4g: Extract Quotes
+
+For notable or memorable statements:
+
+```bash
+./target/debug/engine -d data/knowledge.db add-quote <video-id> "The quote text" \
+  --speaker "Who said it" \
+  --at <timestamp> \
+  --context "Why this quote matters"
+```
 
 ---
 
@@ -109,7 +243,7 @@ For each significant claim:
 Connect claims to build the knowledge graph:
 
 ```bash
-./target/debug/engine link <claim-id> <claim-id> --as <relationship>
+./target/debug/engine -d data/knowledge.db link <claim-id> <claim-id> --as <relationship>
 ```
 
 **Relationships:**
@@ -138,7 +272,7 @@ Connect claims to build the knowledge graph:
 When you identify recurring historical patterns:
 
 ```bash
-./target/debug/engine cyclical <video-id> -t <type> -e "Entity" "Description"
+./target/debug/engine -d data/knowledge.db cyclical <video-id> -t <type> -e "Entity" "Description"
 ```
 
 Types:
@@ -155,7 +289,7 @@ Types:
 When claims have cause-effect relationships:
 
 ```bash
-./target/debug/engine causal <cause-claim-id> <effect-claim-id> \
+./target/debug/engine -d data/knowledge.db causal <cause-claim-id> <effect-claim-id> \
   -l <positive|negative|linear> \
   -s <strong|moderate|weak|speculative>
 ```
@@ -166,7 +300,7 @@ When claims have cause-effect relationships:
 When ideas spread between cultures or traditions:
 
 ```bash
-./target/debug/engine transmission "idea name" \
+./target/debug/engine -d data/knowledge.db transmission "idea name" \
   -f "source culture" \
   -t "target culture" \
   -y <horizontal|vertical|oblique> \
@@ -181,11 +315,11 @@ When geopolitical dynamics are discussed:
 
 ```bash
 # Define entity positions
-./target/debug/engine position "Rome" --era "Classical Antiquity" -p core
-./target/debug/engine position "Gaul" --era "Classical Antiquity" -p periphery
+./target/debug/engine -d data/knowledge.db position "Rome" --era "Classical Antiquity" -p core
+./target/debug/engine -d data/knowledge.db position "Gaul" --era "Classical Antiquity" -p periphery
 
 # Track surplus flows
-./target/debug/engine flow <from-entity-id> <to-entity-id> "grain" --era "Classical Antiquity"
+./target/debug/engine -d data/knowledge.db flow <from-entity-id> <to-entity-id> "grain" --era "Classical Antiquity"
 ```
 
 #### 6e. Braudel's Timescales
@@ -194,7 +328,7 @@ When geopolitical dynamics are discussed:
 Classify claims by temporal scope:
 
 ```bash
-./target/debug/engine timescale <claim-id> -s <event|conjuncture|longue_duree>
+./target/debug/engine -d data/knowledge.db timescale <claim-id> -s <event|conjuncture|longue_duree>
 ```
 
 - `event` - Short-term events
@@ -208,7 +342,7 @@ Classify claims by temporal scope:
 Identify geographic locations mentioned in the transcript and add them for map visualization:
 
 ```bash
-./target/debug/engine locate <video-id> \
+./target/debug/engine -d data/knowledge.db locate <video-id> \
   --place "Place Name" \
   --lat <latitude> \
   --lon <longitude> \
@@ -233,7 +367,7 @@ Identify geographic locations mentioned in the transcript and add them for map v
 
 For unlisted locations, use approximate coordinates. Check existing:
 ```bash
-./target/debug/engine locations
+./target/debug/engine -d data/knowledge.db locations
 ```
 
 ---
@@ -244,15 +378,15 @@ If the video covers a coherent topic with 5+ related claims, create or add to a 
 
 ```bash
 # Create new MOC
-./target/debug/engine moc-create "Topic Name" --description "What this MOC covers"
+./target/debug/engine -d data/knowledge.db moc-create "Topic Name" --description "What this MOC covers"
 
 # Add claims to MOC
-./target/debug/engine moc-add <moc-id> <claim-id>
+./target/debug/engine -d data/knowledge.db moc-add <moc-id> <claim-id>
 ```
 
 Check existing MOCs first:
 ```bash
-./target/debug/engine mocs
+./target/debug/engine -d data/knowledge.db mocs
 ```
 
 ---
@@ -262,17 +396,17 @@ Check existing MOCs first:
 If the video raises interesting questions for further investigation:
 
 ```bash
-./target/debug/engine ask "What conditions precede X?" --notes "Raised by video content"
+./target/debug/engine -d data/knowledge.db ask "What conditions precede X?" --notes "Raised by video content"
 ```
 
 Link evidence to existing questions:
 ```bash
-./target/debug/engine evidence <question-id> --claim <claim-id> --relevance "How it relates"
+./target/debug/engine -d data/knowledge.db evidence <question-id> --claim <claim-id> --relevance "How it relates"
 ```
 
 Check existing questions:
 ```bash
-./target/debug/engine questions
+./target/debug/engine -d data/knowledge.db questions
 ```
 
 ---
@@ -282,7 +416,7 @@ Check existing questions:
 If you notice patterns across this video and others:
 
 ```bash
-./target/debug/engine pattern -t <type> "Description" --claims "1,2,3" --videos "id1,id2"
+./target/debug/engine -d data/knowledge.db pattern -t <type> "Description" --claims "1,2,3" --videos "id1,id2"
 ```
 
 Types:
@@ -299,7 +433,7 @@ Types:
 Count claims extracted and complete:
 
 ```bash
-./target/debug/engine queue-complete <video-id> --claims <count>
+./target/debug/engine -d data/knowledge.db queue-complete <video-id> --claims <count>
 ```
 
 ---
@@ -307,7 +441,7 @@ Count claims extracted and complete:
 ### Step 12: Check for More
 
 ```bash
-./target/debug/engine queue
+./target/debug/engine -d data/knowledge.db queue
 ```
 
 ---
@@ -316,7 +450,7 @@ Count claims extracted and complete:
 
 If processing fails:
 ```bash
-./target/debug/engine queue-fail <video-id> --reason "description"
+./target/debug/engine -d data/knowledge.db queue-fail <video-id> --reason "description"
 ```
 
 ---
@@ -325,42 +459,84 @@ If processing fails:
 
 ```bash
 # Start
-./target/debug/engine queue-start Jjqf9T59uY0
-./target/debug/engine export-transcript Jjqf9T59uY0
+./target/debug/engine -d data/knowledge.db queue-start x1E5rRmCiT4
+./target/debug/engine -d data/knowledge.db export-transcript x1E5rRmCiT4
 
 # Tag era and region
-./target/debug/engine tag Jjqf9T59uY0 --era "Prehistoric" --region "Levant"
+./target/debug/engine -d data/knowledge.db tag x1E5rRmCiT4 --era "Prehistoric" --region "Europe"
 
-# Extract claims
-./target/debug/engine add-claim Jjqf9T59uY0 "Agriculture preceded permanent settlement" \
-  --quote "farming actually happened first" --category factual --confidence high --at 300
+# === EXTRACT SOURCES ===
+./target/debug/engine -d data/knowledge.db add-source "The Dawn of Everything" --author "David Graeber, David Wengrow" -t book -y 2021
+./target/debug/engine -d data/knowledge.db cite-source x1E5rRmCiT4 1 --at 1820 --context "Referenced for dwarf burial evidence"
 
-./target/debug/engine add-claim Jjqf9T59uY0 "Religion drove agricultural transition" \
-  --quote "people built temples first, then started farming" --category causal --confidence high --at 840
+# === EXTRACT SCHOLARS ===
+./target/debug/engine -d data/knowledge.db add-scholar "Immanuel Kant" --field "Philosophy" --era "18th century" --contribution "Critique of Pure Reason - reality as mental construction"
+./target/debug/engine -d data/knowledge.db cite-scholar x1E5rRmCiT4 1 --at 2246 --context "Discussed reality as constructed by the mind"
+
+./target/debug/engine -d data/knowledge.db add-scholar "Emile Durkheim" --field "Sociology" --era "19th-20th century" --contribution "Founder of sociology - religion as collective consciousness"
+./target/debug/engine -d data/knowledge.db cite-scholar x1E5rRmCiT4 2 --at 2570 --context "Quoted on religion creating society"
+
+./target/debug/engine -d data/knowledge.db add-scholar "Genevieve von Petzinger" --field "Anthropology" --contribution "Research on recurring symbols in Ice Age cave paintings"
+./target/debug/engine -d data/knowledge.db cite-scholar x1E5rRmCiT4 3 --at 1928 --context "Documented 32 recurring symbols in cave paintings worldwide"
+
+# === EXTRACT VISUALS ===
+./target/debug/engine -d data/knowledge.db add-visual x1E5rRmCiT4 "Cave painting of lions at Chauvet Cave" --at 306 -t painting --significance "Shows artistic sophistication 30,000 years ago"
+./target/debug/engine -d data/knowledge.db add-visual x1E5rRmCiT4 "Cave painting of horses at Lascaux" --at 352 -t painting --significance "Picasso said 'we learned nothing in 10,000 years'"
+./target/debug/engine -d data/knowledge.db add-visual x1E5rRmCiT4 "Bird-like shaman figures in cave painting" --at 1476 -t painting --significance "Evidence of shamans dressing as animals"
+./target/debug/engine -d data/knowledge.db add-visual x1E5rRmCiT4 "Skeleton of dwarf at Romito cave" --at 1562 -t skeleton --significance "Evidence of care for disabled in prehistoric societies"
+./target/debug/engine -d data/knowledge.db add-visual x1E5rRmCiT4 "Chart of 32 recurring cave painting symbols" --at 1928 -t chart --significance "Evidence of proto-written language"
+
+# === EXTRACT TERMS ===
+./target/debug/engine -d data/knowledge.db define "Animism" "Belief that all living things have souls and are interconnected - probably the first religion" --domain religion --video x1E5rRmCiT4 --at 1259
+./target/debug/engine -d data/knowledge.db define "Collective consciousness" "Shared beliefs and ideas that allow society to function - religion creates this" --domain sociology --video x1E5rRmCiT4 --at 2790 --scholar "Emile Durkheim"
+./target/debug/engine -d data/knowledge.db define "Shamanism" "Spiritual practice of communicating with the spirit world, often through altered states" --domain religion --video x1E5rRmCiT4 --at 1476
+
+# === EXTRACT EVIDENCE ===
+./target/debug/engine -d data/knowledge.db add-evidence x1E5rRmCiT4 "Cave paintings found in areas with best acoustics - suggests ritual with music" -t archaeological --at 457 --era "Prehistoric"
+./target/debug/engine -d data/knowledge.db add-evidence x1E5rRmCiT4 "Musical instruments (flutes) found alongside cave paintings" -t archaeological --at 492 --era "Prehistoric"
+./target/debug/engine -d data/knowledge.db add-evidence x1E5rRmCiT4 "DNA analysis shows dwarf received same food quality as rest of community" -t genetic --at 1639 --era "Prehistoric"
+./target/debug/engine -d data/knowledge.db add-evidence x1E5rRmCiT4 "High frequency of disabled individuals in elaborate Ice Age burials" -t anthropological --at 1878 --era "Prehistoric"
+
+# === EXTRACT QUOTES ===
+./target/debug/engine -d data/knowledge.db add-quote x1E5rRmCiT4 "We learned nothing in 10,000 years" --speaker "Pablo Picasso" --at 368 --context "On viewing Lascaux cave paintings - their artistic quality equals modern art"
+./target/debug/engine -d data/knowledge.db add-quote x1E5rRmCiT4 "Religion is a system of ideas by which men imagine the society of which they are members" --speaker "Emile Durkheim" --at 2590 --context "Defining religion as collective consciousness"
+
+# === EXTRACT CLAIMS (many more in practice) ===
+./target/debug/engine -d data/knowledge.db add-claim x1E5rRmCiT4 "Religion is what makes humans fundamentally human" \
+  --quote "in fact religion is what makes us fundamentally human" --category factual --confidence high --at 63
+
+./target/debug/engine -d data/knowledge.db add-claim x1E5rRmCiT4 "Cave paintings are expressions of religious beliefs, not merely art" \
+  --quote "these paintings are not about art it's really about religion" --category factual --confidence high --at 528
+
+./target/debug/engine -d data/knowledge.db add-claim x1E5rRmCiT4 "Caves symbolized wombs - portals between physical and spirit world" \
+  --quote "the cave is a portal into another world" --category factual --confidence medium --at 941
+
+# ... (50+ more claims)
 
 # Link claims
-./target/debug/engine link 1 2 --as supports
+./target/debug/engine -d data/knowledge.db link 1 2 --as supports
+./target/debug/engine -d data/knowledge.db link 2 3 --as elaborates
 
 # Apply frameworks
-./target/debug/engine transmission "Mother goddess cult" -f "Levant" -t "Anatolia" -y horizontal -v Jjqf9T59uY0
-./target/debug/engine timescale 2 -s longue_duree
+./target/debug/engine -d data/knowledge.db transmission "Animism" -f "Africa (origins)" -t "Global (all continents)" -y horizontal -v x1E5rRmCiT4
+./target/debug/engine -d data/knowledge.db timescale 1 -s longue_duree
 
 # Add locations for map
-./target/debug/engine locate Jjqf9T59uY0 --place "Göbekli Tepe" --lat 37.223 --lon 38.922 --era "Prehistoric" --note "Oldest known temple complex"
-./target/debug/engine locate Jjqf9T59uY0 --place "Çatalhöyük" --lat 37.666 --lon 32.828 --era "Prehistoric" --note "Early Neolithic settlement, 8000 people"
-./target/debug/engine locate Jjqf9T59uY0 --place "Jericho" --lat 31.871 --lon 35.444 --era "Prehistoric" --note "Tower of Jericho, Natufian site"
+./target/debug/engine -d data/knowledge.db locate x1E5rRmCiT4 --place "Chauvet Cave" --lat 44.388 --lon 4.415 --era "Prehistoric" --note "Cave paintings from ~30,000 years ago"
+./target/debug/engine -d data/knowledge.db locate x1E5rRmCiT4 --place "Lascaux Cave" --lat 45.054 --lon 1.169 --era "Prehistoric" --note "Cave paintings from ~20,000 years ago"
 
-# Create MOC
-./target/debug/engine moc-create "Neolithic Revolution" --description "Theories on agricultural transition"
-./target/debug/engine moc-add 1 1
-./target/debug/engine moc-add 1 2
+# Create/update MOC
+./target/debug/engine -d data/knowledge.db moc-create "Origins of Religion" --description "Theories on emergence of religious belief in prehistoric humans"
+./target/debug/engine -d data/knowledge.db moc-add 1 1
+./target/debug/engine -d data/knowledge.db moc-add 1 2
+./target/debug/engine -d data/knowledge.db moc-add 1 3
 
-# Research question
-./target/debug/engine ask "What role did religion play in early state formation?"
-./target/debug/engine evidence 1 --claim 2 --relevance "Religion preceded agriculture"
+# Research questions
+./target/debug/engine -d data/knowledge.db ask "What caused the transition from animism to monotheism?"
+./target/debug/engine -d data/knowledge.db evidence 1 --claim 1 --relevance "Animism was the original religion"
 
-# Complete
-./target/debug/engine queue-complete Jjqf9T59uY0 --claims 15
+# Complete (note: 50+ claims for 1 hour video)
+./target/debug/engine -d data/knowledge.db queue-complete x1E5rRmCiT4 --claims 55
 ```
 
 ---
@@ -368,11 +544,23 @@ If processing fails:
 ## Quality Checklist
 
 Before marking complete, verify:
+
+**Minimum extraction targets (per hour of content):**
+- [ ] 50+ claims extracted
+- [ ] 3+ sources (books/papers) added
+- [ ] 5+ scholars added
+- [ ] 5+ visuals described
+- [ ] 5+ terms defined
+- [ ] 5+ pieces of evidence recorded
+- [ ] 3+ quotes captured
+
+**Organization:**
 - [ ] Video tagged with era and region
-- [ ] All major claims extracted with quotes
 - [ ] Claims linked (2+ links each)
 - [ ] Analytical frameworks applied where relevant
 - [ ] Key locations added for map visualization
 - [ ] Claims added to appropriate MOC
 - [ ] Research questions generated if applicable
 - [ ] Patterns noted if cross-video connections exist
+
+**If a video seems to have less content, ask yourself: "Did the lecturer really only mention 1 book? Only reference 2 scholars? Only show 3 images?" Usually the answer is no - dig deeper.**

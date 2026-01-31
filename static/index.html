@@ -303,6 +303,80 @@
             border-radius: 3px;
             font-size: 0.85rem;
         }
+
+        /* Library Panel */
+        #library-panel {
+            padding: 20px;
+            overflow-y: auto;
+        }
+        .library-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .lib-tab {
+            padding: 8px 16px;
+            border: 1px solid #333;
+            background: #0f0f23;
+            color: #aaa;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+        .lib-tab:hover { background: #1a1a3e; color: #fff; }
+        .lib-tab.active { background: #4a69bd; color: #fff; border-color: #4a69bd; }
+        .library-content {
+            display: block;
+        }
+        .lib-section {
+            display: none;
+        }
+        .lib-section.active {
+            display: block;
+        }
+        .lib-card {
+            background: #16213e;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+        }
+        .lib-card-title {
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: #fff;
+        }
+        .lib-card-meta {
+            font-size: 0.8rem;
+            color: #888;
+            margin-bottom: 8px;
+        }
+        .lib-card-body {
+            font-size: 0.9rem;
+            color: #ccc;
+        }
+        .lib-card-quote {
+            font-style: italic;
+            border-left: 3px solid #4a69bd;
+            padding-left: 12px;
+            margin: 8px 0;
+        }
+        .lib-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 0.7rem;
+            margin-right: 6px;
+        }
+        .badge-book { background: #8B4513; }
+        .badge-paper { background: #2196F3; }
+        .badge-article { background: #9C27B0; }
+        .badge-archaeological { background: #795548; }
+        .badge-genetic { background: #4CAF50; }
+        .badge-textual { background: #FF9800; }
+        .badge-painting { background: #E91E63; }
+        .badge-map { background: #00BCD4; }
+        .badge-diagram { background: #607D8B; }
     </style>
 </head>
 <body>
@@ -341,6 +415,22 @@
                 <div class="sidebar-content" id="review-summary"></div>
             </div>
 
+            <div class="sidebar-section">
+                <div class="sidebar-header" onclick="toggleSection(this)">
+                    <span>Sources</span>
+                    <span id="source-count">0</span>
+                </div>
+                <div class="sidebar-content" id="source-list"></div>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-header" onclick="toggleSection(this)">
+                    <span>Scholars</span>
+                    <span id="scholar-count">0</span>
+                </div>
+                <div class="sidebar-content" id="scholar-list"></div>
+            </div>
+
             <div class="sidebar-section" style="flex: 1;">
                 <div class="sidebar-header" onclick="toggleSection(this)">
                     <span>Videos</span>
@@ -356,6 +446,7 @@
                 <div class="view-tab active" data-view="graph">Knowledge Graph</div>
                 <div class="view-tab" data-view="map">Map</div>
                 <div class="view-tab" data-view="stats">Statistics</div>
+                <div class="view-tab" data-view="library">Library</div>
                 <div class="view-tab" data-view="review">Review</div>
             </div>
 
@@ -381,6 +472,21 @@
                     <div class="review-section">
                         <h3>Stale Claims (not accessed in 30+ days)</h3>
                         <div id="stale-list"></div>
+                    </div>
+                </div>
+
+                <div class="view-panel" id="library-panel">
+                    <div class="library-tabs">
+                        <button class="lib-tab active" data-lib="terms" onclick="switchLibTab('terms')">Terms</button>
+                        <button class="lib-tab" data-lib="quotes" onclick="switchLibTab('quotes')">Quotes</button>
+                        <button class="lib-tab" data-lib="visuals" onclick="switchLibTab('visuals')">Visuals</button>
+                        <button class="lib-tab" data-lib="evidence" onclick="switchLibTab('evidence')">Evidence</button>
+                    </div>
+                    <div class="library-content">
+                        <div class="lib-section active" id="lib-terms"></div>
+                        <div class="lib-section" id="lib-quotes"></div>
+                        <div class="lib-section" id="lib-visuals"></div>
+                        <div class="lib-section" id="lib-evidence"></div>
                     </div>
                 </div>
 
@@ -416,7 +522,7 @@
             </select>
         </div>
         <div class="era-buttons" id="era-buttons">
-            <button class="era-btn active" data-era="">All Eras</button>
+            <button class="era-btn active" data-era="" onclick="toggleEra('')">All Eras</button>
         </div>
     </div>
 
@@ -429,7 +535,7 @@
         let currentVideoFilter = '';
         let currentMocFilter = '';
         let currentTopicFilter = '';
-        let currentEra = '';
+        let selectedEras = new Set();  // Multiple eras can be selected
 
         // Initialize
         document.addEventListener('DOMContentLoaded', async () => {
@@ -448,7 +554,9 @@
                 loadTopics(),
                 loadStats(),
                 loadQueue(),
-                loadReviewSummary()
+                loadReviewSummary(),
+                loadSources(),
+                loadScholars()
             ]);
         }
 
@@ -468,6 +576,9 @@
                     }
                     if (view === 'review') {
                         loadReviewPanel();
+                    }
+                    if (view === 'library') {
+                        loadLibraryContent('terms');
                     }
                 });
             });
@@ -552,7 +663,7 @@
                 btn.className = 'era-btn';
                 btn.dataset.era = era.name;
                 btn.textContent = era.name;
-                btn.onclick = () => selectEra(era.name);
+                btn.onclick = () => toggleEra(era.name);
                 container.appendChild(btn);
             });
         }
@@ -594,36 +705,36 @@
                     <div class="stat-label">Research Questions</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-value">${stats.active_questions}</div>
-                    <div class="stat-label">Active Questions</div>
+                    <div class="stat-value">${stats.sources || 0}</div>
+                    <div class="stat-label">Sources</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-value">${stats.patterns}</div>
-                    <div class="stat-label">Detected Patterns</div>
+                    <div class="stat-value">${stats.scholars || 0}</div>
+                    <div class="stat-label">Scholars</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.terms || 0}</div>
+                    <div class="stat-label">Terms</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.quotes || 0}</div>
+                    <div class="stat-label">Quotes</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.visuals || 0}</div>
+                    <div class="stat-label">Visuals</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.evidence || 0}</div>
+                    <div class="stat-label">Evidence</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-value">${stats.orphan_claims}</div>
                     <div class="stat-label">Orphan Claims</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-value">${stats.stale_claims}</div>
-                    <div class="stat-label">Stale Claims</div>
-                </div>
-                <div class="stat-card">
                     <div class="stat-value">${stats.framework.cyclical_indicators}</div>
                     <div class="stat-label">Cyclical Indicators</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">${stats.framework.causal_relations}</div>
-                    <div class="stat-label">Causal Relations</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">${stats.framework.idea_transmissions}</div>
-                    <div class="stat-label">Idea Transmissions</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">${stats.framework.geopolitical_entities}</div>
-                    <div class="stat-label">Geopolitical Entities</div>
                 </div>
             `;
         }
@@ -688,6 +799,200 @@
             document.querySelector('[data-view="review"]').click();
         }
 
+        // Load Sources
+        async function loadSources() {
+            const res = await fetch('/api/sources');
+            const sources = await res.json();
+            document.getElementById('source-count').textContent = sources.length;
+
+            const list = document.getElementById('source-list');
+            list.innerHTML = sources.slice(0, 20).map(s => `
+                <div class="sidebar-item" onclick="showSource(${s.id})">
+                    <span>${s.title.substring(0, 25)}${s.title.length > 25 ? '...' : ''}</span>
+                    <span class="item-count">${s.source_type}</span>
+                </div>
+            `).join('');
+        }
+
+        // Load Scholars
+        async function loadScholars() {
+            const res = await fetch('/api/scholars');
+            const scholars = await res.json();
+            document.getElementById('scholar-count').textContent = scholars.length;
+
+            const list = document.getElementById('scholar-list');
+            list.innerHTML = scholars.slice(0, 20).map(s => `
+                <div class="sidebar-item" onclick="showScholar(${s.id})">
+                    <span>${s.name}</span>
+                    <span class="item-count">${s.field || ''}</span>
+                </div>
+            `).join('');
+        }
+
+        // Library tab switching
+        function switchLibTab(tab) {
+            document.querySelectorAll('.lib-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.lib-section').forEach(s => s.classList.remove('active'));
+            document.querySelector(`[data-lib="${tab}"]`).classList.add('active');
+            document.getElementById(`lib-${tab}`).classList.add('active');
+            loadLibraryContent(tab);
+        }
+
+        // Load Library content
+        async function loadLibraryContent(tab) {
+            const container = document.getElementById(`lib-${tab}`);
+            if (container.dataset.loaded === 'true') return;
+
+            let html = '';
+            if (tab === 'terms') {
+                const res = await fetch('/api/terms');
+                const terms = await res.json();
+                html = terms.map(t => `
+                    <div class="lib-card">
+                        <div class="lib-card-title">${t.term}</div>
+                        <div class="lib-card-meta">${t.domain || 'General'}</div>
+                        <div class="lib-card-body">${t.definition}</div>
+                    </div>
+                `).join('') || '<p style="color:#888">No terms defined yet.</p>';
+            } else if (tab === 'quotes') {
+                const res = await fetch('/api/quotes');
+                const quotes = await res.json();
+                html = quotes.map(q => `
+                    <div class="lib-card">
+                        <div class="lib-card-quote">"${q.text}"</div>
+                        <div class="lib-card-meta">
+                            ${q.speaker ? '— ' + q.speaker : ''}
+                            ${q.context ? ' | ' + q.context : ''}
+                        </div>
+                    </div>
+                `).join('') || '<p style="color:#888">No quotes captured yet.</p>';
+            } else if (tab === 'visuals') {
+                const res = await fetch('/api/visuals');
+                const visuals = await res.json();
+                html = visuals.map(v => `
+                    <div class="lib-card">
+                        <div class="lib-card-title">
+                            <span class="lib-badge badge-${v.visual_type}">${v.visual_type}</span>
+                            ${v.description.substring(0, 60)}${v.description.length > 60 ? '...' : ''}
+                        </div>
+                        <div class="lib-card-meta">${v.video_id} @ ${formatTime(v.timestamp)}</div>
+                        ${v.significance ? `<div class="lib-card-body">${v.significance}</div>` : ''}
+                    </div>
+                `).join('') || '<p style="color:#888">No visuals captured yet.</p>';
+            } else if (tab === 'evidence') {
+                const res = await fetch('/api/evidence');
+                const evidence = await res.json();
+                html = evidence.map(e => `
+                    <div class="lib-card">
+                        <div class="lib-card-title">
+                            <span class="lib-badge badge-${e.evidence_type}">${e.evidence_type}</span>
+                            ${e.description.substring(0, 80)}${e.description.length > 80 ? '...' : ''}
+                        </div>
+                        <div class="lib-card-meta">
+                            ${e.video_id}
+                            ${e.timestamp ? ' @ ' + formatTime(e.timestamp) : ''}
+                        </div>
+                    </div>
+                `).join('') || '<p style="color:#888">No evidence captured yet.</p>';
+            }
+
+            container.innerHTML = html;
+            container.dataset.loaded = 'true';
+        }
+
+        function formatTime(seconds) {
+            if (!seconds) return '';
+            const m = Math.floor(seconds / 60);
+            const s = Math.floor(seconds % 60);
+            return `${m}:${s.toString().padStart(2, '0')}`;
+        }
+
+        async function showSource(id) {
+            const res = await fetch('/api/sources');
+            const sources = await res.json();
+            const source = sources.find(s => s.id === id);
+            if (!source) return;
+
+            const panel = document.getElementById('detail-panel');
+            const content = document.getElementById('detail-content');
+
+            content.innerHTML = `
+                <div class="detail-section">
+                    <h4>Source</h4>
+                    <p style="font-size: 1.1rem; font-weight: 600;">${source.title}</p>
+                </div>
+                ${source.author ? `
+                <div class="detail-section">
+                    <h4>Author</h4>
+                    <p>${source.author}</p>
+                </div>
+                ` : ''}
+                <div class="detail-section">
+                    <h4>Type</h4>
+                    <p><span class="lib-badge badge-${source.source_type}">${source.source_type}</span></p>
+                </div>
+                ${source.year ? `
+                <div class="detail-section">
+                    <h4>Year</h4>
+                    <p>${source.year}</p>
+                </div>
+                ` : ''}
+                ${source.url ? `
+                <div class="detail-section">
+                    <h4>URL</h4>
+                    <p><a href="${source.url}" target="_blank" style="color: #4a69bd;">${source.url}</a></p>
+                </div>
+                ` : ''}
+                ${source.notes ? `
+                <div class="detail-section">
+                    <h4>Notes</h4>
+                    <p>${source.notes}</p>
+                </div>
+                ` : ''}
+            `;
+
+            document.querySelector('.detail-header span:first-child').textContent = 'Source Details';
+            panel.classList.add('open');
+        }
+
+        async function showScholar(id) {
+            const res = await fetch('/api/scholars');
+            const scholars = await res.json();
+            const scholar = scholars.find(s => s.id === id);
+            if (!scholar) return;
+
+            const panel = document.getElementById('detail-panel');
+            const content = document.getElementById('detail-content');
+
+            content.innerHTML = `
+                <div class="detail-section">
+                    <h4>Scholar</h4>
+                    <p style="font-size: 1.1rem; font-weight: 600;">${scholar.name}</p>
+                </div>
+                ${scholar.field ? `
+                <div class="detail-section">
+                    <h4>Field</h4>
+                    <p>${scholar.field}</p>
+                </div>
+                ` : ''}
+                ${scholar.era ? `
+                <div class="detail-section">
+                    <h4>Era</h4>
+                    <p>${scholar.era}</p>
+                </div>
+                ` : ''}
+                ${scholar.contribution ? `
+                <div class="detail-section">
+                    <h4>Key Contribution</h4>
+                    <p>${scholar.contribution}</p>
+                </div>
+                ` : ''}
+            `;
+
+            document.querySelector('.detail-header span:first-child').textContent = 'Scholar Details';
+            panel.classList.add('open');
+        }
+
         // Initialize Graph
         function initGraph() {
             loadGraph();
@@ -698,7 +1003,9 @@
             if (currentVideoFilter) url += `video_id=${currentVideoFilter}&`;
             if (currentMocFilter) url += `moc_id=${currentMocFilter}&`;
             if (currentTopicFilter) url += `topic=${encodeURIComponent(currentTopicFilter)}&`;
-            if (currentEra) url += `era=${encodeURIComponent(currentEra)}&`;
+            if (selectedEras.size > 0) {
+                url += `era=${encodeURIComponent([...selectedEras].join(','))}&`;
+            }
 
             const res = await fetch(url);
             const data = await res.json();
@@ -753,7 +1060,9 @@
 
         async function loadPins() {
             let url = '/api/pins?';
-            if (currentEra) url += `era=${encodeURIComponent(currentEra)}&`;
+            if (selectedEras.size > 0) {
+                url += `era=${encodeURIComponent([...selectedEras].join(','))}&`;
+            }
 
             const res = await fetch(url);
             const pins = await res.json();
@@ -866,10 +1175,23 @@
             loadPins();
         }
 
-        function selectEra(era) {
-            currentEra = era;
+        function toggleEra(era) {
+            if (era === '') {
+                // "All Eras" button - clear selection to show everything
+                selectedEras.clear();
+            } else if (selectedEras.has(era)) {
+                selectedEras.delete(era);
+            } else {
+                selectedEras.add(era);
+            }
+            // Update button states
             document.querySelectorAll('.era-btn').forEach(btn => {
-                btn.classList.toggle('active', btn.dataset.era === era);
+                if (btn.dataset.era === '') {
+                    // "All Eras" is active when nothing is selected
+                    btn.classList.toggle('active', selectedEras.size === 0);
+                } else {
+                    btn.classList.toggle('active', selectedEras.has(btn.dataset.era));
+                }
             });
             loadGraph();
             loadPins();

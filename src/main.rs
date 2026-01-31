@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use engine::{Database, Fetcher};
+use engine::{Database, Fetcher, SourceType, VisualType, EvidenceType};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -802,6 +802,179 @@ enum Commands {
     },
     /// Export pending video IDs from queue
     ExportQueue,
+
+    // Phase 12: Expanded Knowledge Entities
+
+    /// Add a source (book, paper, documentary)
+    #[command(name = "add-source")]
+    AddSource {
+        /// Title of the source
+        title: String,
+        /// Author(s)
+        #[arg(long)]
+        author: Option<String>,
+        /// Type: book, paper, documentary, article, lecture
+        #[arg(short = 't', long, default_value = "book")]
+        source_type: String,
+        /// Publication year
+        #[arg(short, long)]
+        year: Option<i32>,
+        /// URL if available
+        #[arg(long)]
+        url: Option<String>,
+        /// Notes
+        #[arg(long)]
+        notes: Option<String>,
+    },
+    /// List all sources
+    Sources,
+    /// Cite a source in a video
+    #[command(name = "cite-source")]
+    CiteSource {
+        /// Video ID
+        video_id: String,
+        /// Source ID
+        source_id: i64,
+        /// Timestamp when mentioned
+        #[arg(long)]
+        at: Option<f64>,
+        /// Context of the citation
+        #[arg(long)]
+        context: Option<String>,
+    },
+
+    /// Add a scholar/thinker
+    #[command(name = "add-scholar")]
+    AddScholar {
+        /// Name of the scholar
+        name: String,
+        /// Field of study
+        #[arg(long)]
+        field: Option<String>,
+        /// Era they lived/worked
+        #[arg(long)]
+        era: Option<String>,
+        /// Brief summary of their contribution
+        #[arg(long)]
+        contribution: Option<String>,
+    },
+    /// List all scholars
+    Scholars,
+    /// Cite a scholar in a video
+    #[command(name = "cite-scholar")]
+    CiteScholar {
+        /// Video ID
+        video_id: String,
+        /// Scholar ID
+        scholar_id: i64,
+        /// Timestamp when mentioned
+        #[arg(long)]
+        at: Option<f64>,
+        /// Context of the mention
+        #[arg(long)]
+        context: Option<String>,
+    },
+
+    /// Add a visual (image, diagram, artifact shown in video)
+    #[command(name = "add-visual")]
+    AddVisual {
+        /// Video ID
+        video_id: String,
+        /// Description of the visual
+        description: String,
+        /// Timestamp when shown
+        #[arg(long)]
+        at: f64,
+        /// Type: painting, map, diagram, artifact, chart, photo, skeleton, symbol
+        #[arg(short = 't', long, default_value = "photo")]
+        visual_type: String,
+        /// Why this visual is significant
+        #[arg(long)]
+        significance: Option<String>,
+        /// Location name (will be looked up)
+        #[arg(long)]
+        location: Option<String>,
+        /// Era name
+        #[arg(long)]
+        era: Option<String>,
+    },
+    /// List visuals for a video
+    Visuals {
+        /// Video ID
+        video_id: String,
+    },
+
+    /// Define a term/concept
+    Define {
+        /// The term to define
+        term: String,
+        /// Definition text
+        definition: String,
+        /// Domain: philosophy, archaeology, religion, sociology, etc.
+        #[arg(long)]
+        domain: Option<String>,
+        /// Video where first defined
+        #[arg(long)]
+        video: Option<String>,
+        /// Timestamp when defined
+        #[arg(long)]
+        at: Option<f64>,
+        /// Scholar who coined it (name, will be looked up)
+        #[arg(long)]
+        scholar: Option<String>,
+    },
+    /// List all terms
+    Terms,
+
+    /// Add evidence cited in a video
+    #[command(name = "add-evidence")]
+    AddEvidence {
+        /// Video ID
+        video_id: String,
+        /// Description of the evidence
+        description: String,
+        /// Type: archaeological, genetic, textual, anthropological, linguistic, artistic, scientific
+        #[arg(short = 't', long, default_value = "archaeological")]
+        evidence_type: String,
+        /// Timestamp when discussed
+        #[arg(long)]
+        at: Option<f64>,
+        /// Location name (will be looked up)
+        #[arg(long)]
+        location: Option<String>,
+        /// Era name
+        #[arg(long)]
+        era: Option<String>,
+    },
+    /// List evidence for a video
+    #[command(name = "video-evidence")]
+    VideoEvidence {
+        /// Video ID
+        video_id: String,
+    },
+
+    /// Add a notable quote
+    #[command(name = "add-quote")]
+    AddQuote {
+        /// Video ID
+        video_id: String,
+        /// The quote text
+        text: String,
+        /// Who said it
+        #[arg(long)]
+        speaker: Option<String>,
+        /// Timestamp
+        #[arg(long)]
+        at: Option<f64>,
+        /// Context/significance
+        #[arg(long)]
+        context: Option<String>,
+    },
+    /// List quotes from a video
+    Quotes {
+        /// Video ID
+        video_id: String,
+    },
 }
 
 fn main() -> Result<()> {
@@ -958,6 +1131,30 @@ fn main() -> Result<()> {
         Commands::QueueClear { completed, failed } => cmd_queue_clear(&db, completed, failed),
         Commands::ExportTranscript { video_id } => cmd_export_transcript(&db, &video_id),
         Commands::ExportQueue => cmd_export_queue(&db),
+
+        // Phase 12: Expanded Knowledge Entities
+        Commands::AddSource { title, author, source_type, year, url, notes } =>
+            cmd_add_source(&db, &title, author.as_deref(), &source_type, year, url.as_deref(), notes.as_deref()),
+        Commands::Sources => cmd_list_sources(&db),
+        Commands::CiteSource { video_id, source_id, at, context } =>
+            cmd_cite_source(&db, &video_id, source_id, at, context.as_deref()),
+        Commands::AddScholar { name, field, era, contribution } =>
+            cmd_add_scholar(&db, &name, field.as_deref(), era.as_deref(), contribution.as_deref()),
+        Commands::Scholars => cmd_list_scholars(&db),
+        Commands::CiteScholar { video_id, scholar_id, at, context } =>
+            cmd_cite_scholar(&db, &video_id, scholar_id, at, context.as_deref()),
+        Commands::AddVisual { video_id, description, at, visual_type, significance, location, era } =>
+            cmd_add_visual(&db, &video_id, &description, at, &visual_type, significance.as_deref(), location.as_deref(), era.as_deref()),
+        Commands::Visuals { video_id } => cmd_list_visuals(&db, &video_id),
+        Commands::Define { term, definition, domain, video, at, scholar } =>
+            cmd_define_term(&db, &term, &definition, domain.as_deref(), video.as_deref(), at, scholar.as_deref()),
+        Commands::Terms => cmd_list_terms(&db),
+        Commands::AddEvidence { video_id, description, evidence_type, at, location, era } =>
+            cmd_add_cited_evidence(&db, &video_id, &description, &evidence_type, at, location.as_deref(), era.as_deref()),
+        Commands::VideoEvidence { video_id } => cmd_list_cited_evidence(&db, &video_id),
+        Commands::AddQuote { video_id, text, speaker, at, context } =>
+            cmd_add_quote(&db, &video_id, &text, speaker.as_deref(), at, context.as_deref()),
+        Commands::Quotes { video_id } => cmd_list_quotes(&db, &video_id),
     }
 }
 
@@ -1594,8 +1791,14 @@ fn cmd_serve(db_path: PathBuf, port: u16) -> Result<()> {
 
     #[derive(serde::Deserialize)]
     struct MapQuery {
-        era: Option<String>,
+        era: Option<String>,  // Comma-separated eras
         topic: Option<String>,
+    }
+
+    fn parse_eras(era: &Option<String>) -> Vec<String> {
+        era.as_ref()
+            .map(|s| s.split(',').map(|e| e.trim().to_string()).filter(|e| !e.is_empty()).collect())
+            .unwrap_or_default()
     }
 
     #[derive(serde::Deserialize)]
@@ -1609,7 +1812,7 @@ fn cmd_serve(db_path: PathBuf, port: u16) -> Result<()> {
     struct GraphQuery {
         video_id: Option<String>,
         moc_id: Option<i64>,
-        era: Option<String>,
+        era: Option<String>,  // Comma-separated eras
         topic: Option<String>,
     }
 
@@ -1684,6 +1887,13 @@ fn cmd_serve(db_path: PathBuf, port: u16) -> Result<()> {
         stale_claims: usize,
         framework: engine::FrameworkStats,
         claims_by_category: Vec<CategoryCount>,
+        // Phase 12: Expanded knowledge entities
+        sources: i64,
+        scholars: i64,
+        terms: i64,
+        visuals: i64,
+        evidence: i64,
+        quotes: i64,
     }
 
     #[derive(serde::Serialize)]
@@ -1703,9 +1913,27 @@ fn cmd_serve(db_path: PathBuf, port: u16) -> Result<()> {
         Query(q): Query<MapQuery>,
     ) -> Result<Json<Vec<engine::MapPin>>, StatusCode> {
         let db = open_db(&state)?;
-        let pins = db
-            .get_map_pins(q.era.as_deref(), q.topic.as_deref())
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let eras = parse_eras(&q.era);
+        let pins = if eras.is_empty() {
+            // No era filter - show all pins
+            db.get_map_pins(None, q.topic.as_deref())
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        } else {
+            // Multiple eras - union pins from each era
+            let mut all_pins = Vec::new();
+            let mut seen_ids = std::collections::HashSet::new();
+            for era in &eras {
+                let era_pins = db.get_map_pins(Some(era), q.topic.as_deref())
+                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                for pin in era_pins {
+                    let key = (pin.location.id, pin.video_id.clone());
+                    if seen_ids.insert(key) {
+                        all_pins.push(pin);
+                    }
+                }
+            }
+            all_pins
+        };
         Ok(Json(pins))
     }
 
@@ -1775,12 +2003,18 @@ fn cmd_serve(db_path: PathBuf, port: u16) -> Result<()> {
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
                 .ok_or(StatusCode::NOT_FOUND)?;
             moc.claims
-        } else if let Some(ref era) = q.era {
-            // Filter by era: get videos with this era, then get their claims
-            let videos = db.browse_videos(Some(era), None).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        } else if q.era.is_some() {
+            // Filter by era(s): get videos with these eras, then get their claims
+            let eras = parse_eras(&q.era);
             let mut era_claims = Vec::new();
-            for video in videos {
-                era_claims.extend(db.list_claims_for_video(&video.id).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?);
+            let mut seen_videos = std::collections::HashSet::new();
+            for era in &eras {
+                let videos = db.browse_videos(Some(era), None).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                for video in videos {
+                    if seen_videos.insert(video.id.clone()) {
+                        era_claims.extend(db.list_claims_for_video(&video.id).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?);
+                    }
+                }
             }
             era_claims
         } else if let Some(ref topic) = q.topic {
@@ -1936,6 +2170,14 @@ fn cmd_serve(db_path: PathBuf, port: u16) -> Result<()> {
             CategoryCount { category: "geopolitical".to_string(), count: 0 },
         ];
 
+        // Phase 12: Get expanded entity counts
+        let sources = db.get_sources().map(|s| s.len() as i64).unwrap_or(0);
+        let scholars = db.get_scholars().map(|s| s.len() as i64).unwrap_or(0);
+        let terms = db.get_terms().map(|t| t.len() as i64).unwrap_or(0);
+        let visuals = db.get_all_visuals().map(|v| v.len() as i64).unwrap_or(0);
+        let evidence = db.get_all_evidence().map(|e| e.len() as i64).unwrap_or(0);
+        let quotes = db.get_all_quotes().map(|q| q.len() as i64).unwrap_or(0);
+
         Ok(Json(FullStats {
             videos,
             claims,
@@ -1948,6 +2190,12 @@ fn cmd_serve(db_path: PathBuf, port: u16) -> Result<()> {
             stale_claims: stale,
             framework,
             claims_by_category,
+            sources,
+            scholars,
+            terms,
+            visuals,
+            evidence,
+            quotes,
         }))
     }
 
@@ -1995,6 +2243,56 @@ fn cmd_serve(db_path: PathBuf, port: u16) -> Result<()> {
         Ok(Json(QueueSummary { pending, in_progress, completed, failed, current }))
     }
 
+    // Phase 12: API endpoints for expanded knowledge entities
+
+    async fn get_sources(
+        State(state): State<Arc<AppState>>,
+    ) -> Result<Json<Vec<engine::Source>>, StatusCode> {
+        let db = open_db(&state)?;
+        let sources = db.get_sources().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        Ok(Json(sources))
+    }
+
+    async fn get_scholars(
+        State(state): State<Arc<AppState>>,
+    ) -> Result<Json<Vec<engine::Scholar>>, StatusCode> {
+        let db = open_db(&state)?;
+        let scholars = db.get_scholars().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        Ok(Json(scholars))
+    }
+
+    async fn get_terms(
+        State(state): State<Arc<AppState>>,
+    ) -> Result<Json<Vec<engine::Term>>, StatusCode> {
+        let db = open_db(&state)?;
+        let terms = db.get_terms().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        Ok(Json(terms))
+    }
+
+    async fn get_visuals(
+        State(state): State<Arc<AppState>>,
+    ) -> Result<Json<Vec<engine::Visual>>, StatusCode> {
+        let db = open_db(&state)?;
+        let visuals = db.get_all_visuals().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        Ok(Json(visuals))
+    }
+
+    async fn get_evidence(
+        State(state): State<Arc<AppState>>,
+    ) -> Result<Json<Vec<engine::Evidence>>, StatusCode> {
+        let db = open_db(&state)?;
+        let evidence = db.get_all_evidence().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        Ok(Json(evidence))
+    }
+
+    async fn get_quotes(
+        State(state): State<Arc<AppState>>,
+    ) -> Result<Json<Vec<engine::Quote>>, StatusCode> {
+        let db = open_db(&state)?;
+        let quotes = db.get_all_quotes().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        Ok(Json(quotes))
+    }
+
     async fn get_index() -> axum::response::Html<&'static str> {
         axum::response::Html(include_str!("../static/index.html"))
     }
@@ -2018,6 +2316,13 @@ fn cmd_serve(db_path: PathBuf, port: u16) -> Result<()> {
         .route("/api/review/orphans", get(get_review_orphans))
         .route("/api/review/stale", get(get_review_stale))
         .route("/api/queue", get(get_queue))
+        // Phase 12: Expanded knowledge entity endpoints
+        .route("/api/sources", get(get_sources))
+        .route("/api/scholars", get(get_scholars))
+        .route("/api/terms", get(get_terms))
+        .route("/api/visuals", get(get_visuals))
+        .route("/api/evidence", get(get_evidence))
+        .route("/api/quotes", get(get_quotes))
         .layer(CorsLayer::permissive())
         .with_state(state);
 
@@ -4665,4 +4970,313 @@ fn cmd_export_queue(db: &Database) -> Result<()> {
     }
 
     Ok(())
+}
+
+// ============================================
+// Phase 12: Expanded Knowledge Entity Commands
+// ============================================
+
+fn cmd_add_source(
+    db: &Database,
+    title: &str,
+    author: Option<&str>,
+    source_type: &str,
+    year: Option<i32>,
+    url: Option<&str>,
+    notes: Option<&str>,
+) -> Result<()> {
+    let st = SourceType::from_str(source_type)
+        .ok_or_else(|| anyhow::anyhow!("Invalid source type: {}. Valid options: book, paper, documentary, article, lecture, website", source_type))?;
+
+    let id = db.add_source(title, author, st, year, url, notes)?;
+    println!("Added source #{}: {}", id, title);
+    if let Some(a) = author {
+        println!("  Author: {}", a);
+    }
+    println!("  Type: {}", source_type);
+    if let Some(y) = year {
+        println!("  Year: {}", y);
+    }
+    Ok(())
+}
+
+fn cmd_list_sources(db: &Database) -> Result<()> {
+    let sources = db.get_sources()?;
+    if sources.is_empty() {
+        println!("No sources in knowledge base.");
+        return Ok(());
+    }
+
+    println!("{:<5} {:<40} {:<25} {:<12} {:<6}", "ID", "TITLE", "AUTHOR", "TYPE", "YEAR");
+    println!("{}", "-".repeat(90));
+    for s in sources {
+        println!("{:<5} {:<40} {:<25} {:<12} {:<6}",
+            s.id,
+            truncate(&s.title, 38),
+            s.author.as_deref().map(|a| truncate(a, 23)).unwrap_or("-".to_string()),
+            s.source_type.as_str(),
+            s.year.map(|y| y.to_string()).unwrap_or("-".to_string()),
+        );
+    }
+    Ok(())
+}
+
+fn cmd_cite_source(db: &Database, video_id: &str, source_id: i64, timestamp: Option<f64>, context: Option<&str>) -> Result<()> {
+    db.cite_source(video_id, source_id, timestamp, context)?;
+    println!("Cited source #{} in video {}", source_id, video_id);
+    Ok(())
+}
+
+fn cmd_add_scholar(
+    db: &Database,
+    name: &str,
+    field: Option<&str>,
+    era: Option<&str>,
+    contribution: Option<&str>,
+) -> Result<()> {
+    // Check if scholar already exists
+    if let Some(existing) = db.find_scholar_by_name(name)? {
+        println!("Scholar already exists: #{} {}", existing.id, existing.name);
+        return Ok(());
+    }
+
+    let id = db.add_scholar(name, field, era, contribution)?;
+    println!("Added scholar #{}: {}", id, name);
+    if let Some(f) = field {
+        println!("  Field: {}", f);
+    }
+    if let Some(e) = era {
+        println!("  Era: {}", e);
+    }
+    Ok(())
+}
+
+fn cmd_list_scholars(db: &Database) -> Result<()> {
+    let scholars = db.get_scholars()?;
+    if scholars.is_empty() {
+        println!("No scholars in knowledge base.");
+        return Ok(());
+    }
+
+    println!("{:<5} {:<30} {:<20} {:<15}", "ID", "NAME", "FIELD", "ERA");
+    println!("{}", "-".repeat(72));
+    for s in scholars {
+        println!("{:<5} {:<30} {:<20} {:<15}",
+            s.id,
+            truncate(&s.name, 28),
+            s.field.as_deref().map(|f| truncate(f, 18)).unwrap_or("-".to_string()),
+            s.era.as_deref().map(|e| truncate(e, 13)).unwrap_or("-".to_string()),
+        );
+    }
+    Ok(())
+}
+
+fn cmd_cite_scholar(db: &Database, video_id: &str, scholar_id: i64, timestamp: Option<f64>, context: Option<&str>) -> Result<()> {
+    db.cite_scholar(video_id, scholar_id, timestamp, context)?;
+    println!("Cited scholar #{} in video {}", scholar_id, video_id);
+    Ok(())
+}
+
+fn cmd_add_visual(
+    db: &Database,
+    video_id: &str,
+    description: &str,
+    timestamp: f64,
+    visual_type: &str,
+    significance: Option<&str>,
+    location_name: Option<&str>,
+    era_name: Option<&str>,
+) -> Result<()> {
+    let vt = VisualType::from_str(visual_type)
+        .ok_or_else(|| anyhow::anyhow!("Invalid visual type: {}. Valid options: painting, map, diagram, artifact, chart, photo, skeleton, symbol, architecture, inscription", visual_type))?;
+
+    // Look up location ID if provided
+    let location_id = if let Some(loc) = location_name {
+        db.get_location_by_name(loc)?.map(|l| l.id)
+    } else {
+        None
+    };
+
+    // Look up era ID if provided
+    let era_id = if let Some(era) = era_name {
+        db.get_era_by_name(era)?.map(|e| e.id)
+    } else {
+        None
+    };
+
+    let id = db.add_visual(video_id, timestamp, vt, description, significance, location_id, era_id)?;
+    println!("Added visual #{}: {}", id, truncate(description, 50));
+    println!("  Type: {}", visual_type);
+    println!("  Timestamp: {}s", timestamp);
+    if let Some(loc) = location_name {
+        println!("  Location: {}", loc);
+    }
+    Ok(())
+}
+
+fn cmd_list_visuals(db: &Database, video_id: &str) -> Result<()> {
+    let visuals = db.get_visuals_for_video(video_id)?;
+    if visuals.is_empty() {
+        println!("No visuals for video {}.", video_id);
+        return Ok(());
+    }
+
+    println!("Visuals for video {}:\n", video_id);
+    for v in visuals {
+        println!("[{:>6.0}s] {} - {}", v.timestamp, v.visual_type.as_str(), v.description);
+        if let Some(sig) = &v.significance {
+            println!("         Significance: {}", sig);
+        }
+    }
+    Ok(())
+}
+
+fn cmd_define_term(
+    db: &Database,
+    term: &str,
+    definition: &str,
+    domain: Option<&str>,
+    video_id: Option<&str>,
+    timestamp: Option<f64>,
+    scholar_name: Option<&str>,
+) -> Result<()> {
+    // Look up scholar ID if provided
+    let scholar_id = if let Some(name) = scholar_name {
+        db.find_scholar_by_name(name)?.map(|s| s.id)
+    } else {
+        None
+    };
+
+    let id = db.add_term(term, definition, domain, video_id, timestamp, scholar_id)?;
+    println!("Defined term #{}: {}", id, term);
+    println!("  Definition: {}", truncate(definition, 60));
+    if let Some(d) = domain {
+        println!("  Domain: {}", d);
+    }
+    Ok(())
+}
+
+fn cmd_list_terms(db: &Database) -> Result<()> {
+    let terms = db.get_terms()?;
+    if terms.is_empty() {
+        println!("No terms in knowledge base.");
+        return Ok(());
+    }
+
+    println!("{:<5} {:<25} {:<50} {:<15}", "ID", "TERM", "DEFINITION", "DOMAIN");
+    println!("{}", "-".repeat(97));
+    for t in terms {
+        println!("{:<5} {:<25} {:<50} {:<15}",
+            t.id,
+            truncate(&t.term, 23),
+            truncate(&t.definition, 48),
+            t.domain.as_deref().map(|d| truncate(d, 13)).unwrap_or("-".to_string()),
+        );
+    }
+    Ok(())
+}
+
+fn cmd_add_cited_evidence(
+    db: &Database,
+    video_id: &str,
+    description: &str,
+    evidence_type: &str,
+    timestamp: Option<f64>,
+    location_name: Option<&str>,
+    era_name: Option<&str>,
+) -> Result<()> {
+    let et = EvidenceType::from_str(evidence_type)
+        .ok_or_else(|| anyhow::anyhow!("Invalid evidence type: {}. Valid options: archaeological, genetic, textual, anthropological, linguistic, artistic, scientific, historical", evidence_type))?;
+
+    // Look up location ID if provided
+    let location_id = if let Some(loc) = location_name {
+        db.get_location_by_name(loc)?.map(|l| l.id)
+    } else {
+        None
+    };
+
+    // Look up era ID if provided
+    let era_id = if let Some(era) = era_name {
+        db.get_era_by_name(era)?.map(|e| e.id)
+    } else {
+        None
+    };
+
+    let id = db.add_evidence(video_id, et, description, location_id, era_id, timestamp, None)?;
+    println!("Added evidence #{}: {}", id, truncate(description, 50));
+    println!("  Type: {}", evidence_type);
+    if let Some(t) = timestamp {
+        println!("  Timestamp: {}s", t);
+    }
+    Ok(())
+}
+
+fn cmd_list_cited_evidence(db: &Database, video_id: &str) -> Result<()> {
+    let evidence = db.get_evidence_for_video(video_id)?;
+    if evidence.is_empty() {
+        println!("No evidence for video {}.", video_id);
+        return Ok(());
+    }
+
+    println!("Evidence cited in video {}:\n", video_id);
+    for e in evidence {
+        let ts = e.timestamp.map(|t| format!("[{:>6.0}s]", t)).unwrap_or("        ".to_string());
+        println!("{} {} - {}", ts, e.evidence_type.as_str(), e.description);
+    }
+    Ok(())
+}
+
+fn cmd_add_quote(
+    db: &Database,
+    video_id: &str,
+    text: &str,
+    speaker: Option<&str>,
+    timestamp: Option<f64>,
+    context: Option<&str>,
+) -> Result<()> {
+    // Try to find scholar ID if speaker matches a scholar name
+    let scholar_id = if let Some(name) = speaker {
+        db.find_scholar_by_name(name)?.map(|s| s.id)
+    } else {
+        None
+    };
+
+    let id = db.add_quote(video_id, text, speaker, scholar_id, timestamp, context)?;
+    println!("Added quote #{}: \"{}\"", id, truncate(text, 50));
+    if let Some(s) = speaker {
+        println!("  Speaker: {}", s);
+    }
+    if let Some(t) = timestamp {
+        println!("  Timestamp: {}s", t);
+    }
+    Ok(())
+}
+
+fn cmd_list_quotes(db: &Database, video_id: &str) -> Result<()> {
+    let quotes = db.get_quotes_for_video(video_id)?;
+    if quotes.is_empty() {
+        println!("No quotes for video {}.", video_id);
+        return Ok(());
+    }
+
+    println!("Quotes from video {}:\n", video_id);
+    for q in quotes {
+        let ts = q.timestamp.map(|t| format!("[{:>6.0}s]", t)).unwrap_or("        ".to_string());
+        let speaker = q.speaker.as_deref().unwrap_or("(unknown)");
+        println!("{} {} said:", ts, speaker);
+        println!("         \"{}\"", q.text);
+        if let Some(ctx) = &q.context {
+            println!("         Context: {}", ctx);
+        }
+        println!();
+    }
+    Ok(())
+}
+
+fn truncate(s: &str, max_len: usize) -> String {
+    if s.len() <= max_len {
+        s.to_string()
+    } else {
+        format!("{}...", &s[..max_len.saturating_sub(3)])
+    }
 }

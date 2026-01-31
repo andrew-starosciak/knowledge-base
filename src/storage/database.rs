@@ -1,7 +1,7 @@
 use anyhow::Result;
 use rusqlite::{Connection, params};
 use std::path::Path;
-use super::models::{Video, Transcript, TranscriptSegment, SearchResult, SegmentMatch, Era, Region, Topic, Collection, Note, Location, MapPin, AutoTags, SavedSearch, AdvancedSearchResult, ReportEntry, GeoJsonFeature, GeoJsonGeometry, GeoJsonProperties, GeoJsonCollection, Claim, ClaimCategory, Confidence, ClaimLink, LinkType, ClaimWithLinks, TranscriptLayer, TranscriptChunk, Embedding, EmbeddingSource, SimilarityResult, HybridSearchResult, ChunkMatch, EmbeddingStats, CyclicalType, CyclicalIndicator, LoopType, RelationStrength, CausalRelation, TransmissionType, IdeaTransmission, SystemPosition, GeopoliticalEntity, SurplusFlow, BraudelTimescale, TemporalObservation, FrameworkStats, MapOfContent, MocWithClaims, QuestionStatus, ResearchQuestion, QuestionWithEvidence, DetectedPattern, PatternType, ReviewQueue, SynthesisStats, ProcessingStatus, AIProcessingQueue};
+use super::models::{Video, Transcript, TranscriptSegment, SearchResult, SegmentMatch, Era, Region, Topic, Collection, Note, Location, MapPin, AutoTags, SavedSearch, AdvancedSearchResult, ReportEntry, GeoJsonFeature, GeoJsonGeometry, GeoJsonProperties, GeoJsonCollection, Claim, ClaimCategory, Confidence, ClaimLink, LinkType, ClaimWithLinks, TranscriptLayer, TranscriptChunk, Embedding, EmbeddingSource, SimilarityResult, HybridSearchResult, ChunkMatch, EmbeddingStats, CyclicalType, CyclicalIndicator, LoopType, RelationStrength, CausalRelation, TransmissionType, IdeaTransmission, SystemPosition, GeopoliticalEntity, SurplusFlow, BraudelTimescale, TemporalObservation, FrameworkStats, MapOfContent, MocWithClaims, QuestionStatus, ResearchQuestion, QuestionWithEvidence, DetectedPattern, PatternType, ReviewQueue, SynthesisStats, ProcessingStatus, AIProcessingQueue, SourceType, Source, Scholar, VisualType, Visual, Term, EvidenceType, Evidence, Quote};
 use chrono::{DateTime, NaiveDate, Utc};
 
 pub struct Database {
@@ -397,6 +397,136 @@ impl Database {
 
             CREATE INDEX IF NOT EXISTS idx_ai_queue_status ON ai_processing_queue(status);
             CREATE INDEX IF NOT EXISTS idx_ai_queue_priority ON ai_processing_queue(priority DESC);
+
+            -- Phase 12: Expanded Knowledge Entities
+
+            -- Sources (books, papers, documentaries)
+            CREATE TABLE IF NOT EXISTS sources (
+                id INTEGER PRIMARY KEY,
+                title TEXT NOT NULL,
+                author TEXT,
+                source_type TEXT NOT NULL,
+                year INTEGER,
+                url TEXT,
+                notes TEXT,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS video_sources (
+                video_id TEXT NOT NULL REFERENCES videos(id),
+                source_id INTEGER NOT NULL REFERENCES sources(id),
+                timestamp REAL,
+                context TEXT,
+                PRIMARY KEY (video_id, source_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS claim_sources (
+                claim_id INTEGER NOT NULL REFERENCES claims(id),
+                source_id INTEGER NOT NULL REFERENCES sources(id),
+                PRIMARY KEY (claim_id, source_id)
+            );
+
+            -- Scholars (people/thinkers mentioned)
+            CREATE TABLE IF NOT EXISTS scholars (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                field TEXT,
+                era TEXT,
+                contribution TEXT,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS video_scholars (
+                video_id TEXT NOT NULL REFERENCES videos(id),
+                scholar_id INTEGER NOT NULL REFERENCES scholars(id),
+                timestamp REAL,
+                context TEXT,
+                PRIMARY KEY (video_id, scholar_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS claim_scholars (
+                claim_id INTEGER NOT NULL REFERENCES claims(id),
+                scholar_id INTEGER NOT NULL REFERENCES scholars(id),
+                attribution_type TEXT,
+                PRIMARY KEY (claim_id, scholar_id)
+            );
+
+            -- Visuals (images, diagrams, artifacts)
+            CREATE TABLE IF NOT EXISTS visuals (
+                id INTEGER PRIMARY KEY,
+                video_id TEXT NOT NULL REFERENCES videos(id),
+                timestamp REAL NOT NULL,
+                visual_type TEXT NOT NULL,
+                description TEXT NOT NULL,
+                significance TEXT,
+                location_id INTEGER REFERENCES locations(id),
+                era_id INTEGER REFERENCES eras(id),
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS claim_visuals (
+                claim_id INTEGER NOT NULL REFERENCES claims(id),
+                visual_id INTEGER NOT NULL REFERENCES visuals(id),
+                PRIMARY KEY (claim_id, visual_id)
+            );
+
+            -- Terms (definitions and concepts)
+            CREATE TABLE IF NOT EXISTS terms (
+                id INTEGER PRIMARY KEY,
+                term TEXT NOT NULL,
+                definition TEXT NOT NULL,
+                domain TEXT,
+                video_id TEXT REFERENCES videos(id),
+                timestamp REAL,
+                scholar_id INTEGER REFERENCES scholars(id),
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS claim_terms (
+                claim_id INTEGER NOT NULL REFERENCES claims(id),
+                term_id INTEGER NOT NULL REFERENCES terms(id),
+                PRIMARY KEY (claim_id, term_id)
+            );
+
+            -- Evidence (specific evidence cited)
+            CREATE TABLE IF NOT EXISTS evidence (
+                id INTEGER PRIMARY KEY,
+                video_id TEXT NOT NULL REFERENCES videos(id),
+                evidence_type TEXT NOT NULL,
+                description TEXT NOT NULL,
+                location_id INTEGER REFERENCES locations(id),
+                era_id INTEGER REFERENCES eras(id),
+                timestamp REAL,
+                source_id INTEGER REFERENCES sources(id),
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS claim_evidence (
+                claim_id INTEGER NOT NULL REFERENCES claims(id),
+                evidence_id INTEGER NOT NULL REFERENCES evidence(id),
+                relationship TEXT,
+                PRIMARY KEY (claim_id, evidence_id)
+            );
+
+            -- Quotes (notable statements)
+            CREATE TABLE IF NOT EXISTS quotes (
+                id INTEGER PRIMARY KEY,
+                video_id TEXT NOT NULL REFERENCES videos(id),
+                text TEXT NOT NULL,
+                speaker TEXT,
+                scholar_id INTEGER REFERENCES scholars(id),
+                timestamp REAL,
+                context TEXT,
+                created_at TEXT NOT NULL
+            );
+
+            -- Indexes for new tables
+            CREATE INDEX IF NOT EXISTS idx_sources_title ON sources(title);
+            CREATE INDEX IF NOT EXISTS idx_scholars_name ON scholars(name);
+            CREATE INDEX IF NOT EXISTS idx_visuals_video ON visuals(video_id);
+            CREATE INDEX IF NOT EXISTS idx_terms_term ON terms(term);
+            CREATE INDEX IF NOT EXISTS idx_evidence_video ON evidence(video_id);
+            CREATE INDEX IF NOT EXISTS idx_quotes_video ON quotes(video_id);
             "#,
         )?;
 
@@ -4320,6 +4450,532 @@ impl Database {
             error_message: row.get(7)?,
             claims_extracted: row.get(8)?,
         })
+    }
+
+    // ============================================
+    // Phase 12: Expanded Knowledge Entity Methods
+    // ============================================
+
+    // --- Sources ---
+
+    pub fn add_source(
+        &self,
+        title: &str,
+        author: Option<&str>,
+        source_type: SourceType,
+        year: Option<i32>,
+        url: Option<&str>,
+        notes: Option<&str>,
+    ) -> Result<i64> {
+        self.conn.execute(
+            r#"
+            INSERT INTO sources (title, author, source_type, year, url, notes, created_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            "#,
+            params![
+                title,
+                author,
+                source_type.as_str(),
+                year,
+                url,
+                notes,
+                Utc::now().to_rfc3339(),
+            ],
+        )?;
+        Ok(self.conn.last_insert_rowid())
+    }
+
+    pub fn get_sources(&self) -> Result<Vec<Source>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, title, author, source_type, year, url, notes, created_at FROM sources ORDER BY title"
+        )?;
+        let sources = stmt.query_map([], |row| {
+            Ok(Source {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                author: row.get(2)?,
+                source_type: SourceType::from_str(&row.get::<_, String>(3)?).unwrap_or(SourceType::Book),
+                year: row.get(4)?,
+                url: row.get(5)?,
+                notes: row.get(6)?,
+                created_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(7)?)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now()),
+            })
+        })?.collect::<Result<Vec<_>, _>>()?;
+        Ok(sources)
+    }
+
+    pub fn get_source(&self, id: i64) -> Result<Option<Source>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, title, author, source_type, year, url, notes, created_at FROM sources WHERE id = ?1"
+        )?;
+        let mut rows = stmt.query(params![id])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(Source {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                author: row.get(2)?,
+                source_type: SourceType::from_str(&row.get::<_, String>(3)?).unwrap_or(SourceType::Book),
+                year: row.get(4)?,
+                url: row.get(5)?,
+                notes: row.get(6)?,
+                created_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(7)?)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now()),
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn find_source_by_title(&self, title: &str) -> Result<Option<Source>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, title, author, source_type, year, url, notes, created_at FROM sources WHERE title = ?1"
+        )?;
+        let mut rows = stmt.query(params![title])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(Source {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                author: row.get(2)?,
+                source_type: SourceType::from_str(&row.get::<_, String>(3)?).unwrap_or(SourceType::Book),
+                year: row.get(4)?,
+                url: row.get(5)?,
+                notes: row.get(6)?,
+                created_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(7)?)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now()),
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn cite_source(&self, video_id: &str, source_id: i64, timestamp: Option<f64>, context: Option<&str>) -> Result<()> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO video_sources (video_id, source_id, timestamp, context) VALUES (?1, ?2, ?3, ?4)",
+            params![video_id, source_id, timestamp, context],
+        )?;
+        Ok(())
+    }
+
+    // --- Scholars ---
+
+    pub fn add_scholar(
+        &self,
+        name: &str,
+        field: Option<&str>,
+        era: Option<&str>,
+        contribution: Option<&str>,
+    ) -> Result<i64> {
+        self.conn.execute(
+            r#"
+            INSERT INTO scholars (name, field, era, contribution, created_at)
+            VALUES (?1, ?2, ?3, ?4, ?5)
+            "#,
+            params![
+                name,
+                field,
+                era,
+                contribution,
+                Utc::now().to_rfc3339(),
+            ],
+        )?;
+        Ok(self.conn.last_insert_rowid())
+    }
+
+    pub fn get_scholars(&self) -> Result<Vec<Scholar>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, field, era, contribution, created_at FROM scholars ORDER BY name"
+        )?;
+        let scholars = stmt.query_map([], |row| {
+            Ok(Scholar {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                field: row.get(2)?,
+                era: row.get(3)?,
+                contribution: row.get(4)?,
+                created_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(5)?)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now()),
+            })
+        })?.collect::<Result<Vec<_>, _>>()?;
+        Ok(scholars)
+    }
+
+    pub fn get_scholar(&self, id: i64) -> Result<Option<Scholar>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, field, era, contribution, created_at FROM scholars WHERE id = ?1"
+        )?;
+        let mut rows = stmt.query(params![id])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(Scholar {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                field: row.get(2)?,
+                era: row.get(3)?,
+                contribution: row.get(4)?,
+                created_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(5)?)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now()),
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn find_scholar_by_name(&self, name: &str) -> Result<Option<Scholar>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, field, era, contribution, created_at FROM scholars WHERE name = ?1"
+        )?;
+        let mut rows = stmt.query(params![name])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(Scholar {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                field: row.get(2)?,
+                era: row.get(3)?,
+                contribution: row.get(4)?,
+                created_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(5)?)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now()),
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn cite_scholar(&self, video_id: &str, scholar_id: i64, timestamp: Option<f64>, context: Option<&str>) -> Result<()> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO video_scholars (video_id, scholar_id, timestamp, context) VALUES (?1, ?2, ?3, ?4)",
+            params![video_id, scholar_id, timestamp, context],
+        )?;
+        Ok(())
+    }
+
+    // --- Visuals ---
+
+    pub fn add_visual(
+        &self,
+        video_id: &str,
+        timestamp: f64,
+        visual_type: VisualType,
+        description: &str,
+        significance: Option<&str>,
+        location_id: Option<i64>,
+        era_id: Option<i64>,
+    ) -> Result<i64> {
+        self.conn.execute(
+            r#"
+            INSERT INTO visuals (video_id, timestamp, visual_type, description, significance, location_id, era_id, created_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            "#,
+            params![
+                video_id,
+                timestamp,
+                visual_type.as_str(),
+                description,
+                significance,
+                location_id,
+                era_id,
+                Utc::now().to_rfc3339(),
+            ],
+        )?;
+        Ok(self.conn.last_insert_rowid())
+    }
+
+    pub fn get_visuals_for_video(&self, video_id: &str) -> Result<Vec<Visual>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, video_id, timestamp, visual_type, description, significance, location_id, era_id, created_at
+             FROM visuals WHERE video_id = ?1 ORDER BY timestamp"
+        )?;
+        let visuals = stmt.query_map(params![video_id], |row| {
+            Ok(Visual {
+                id: row.get(0)?,
+                video_id: row.get(1)?,
+                timestamp: row.get(2)?,
+                visual_type: VisualType::from_str(&row.get::<_, String>(3)?).unwrap_or(VisualType::Photo),
+                description: row.get(4)?,
+                significance: row.get(5)?,
+                location_id: row.get(6)?,
+                era_id: row.get(7)?,
+                created_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(8)?)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now()),
+            })
+        })?.collect::<Result<Vec<_>, _>>()?;
+        Ok(visuals)
+    }
+
+    // --- Terms ---
+
+    pub fn add_term(
+        &self,
+        term: &str,
+        definition: &str,
+        domain: Option<&str>,
+        video_id: Option<&str>,
+        timestamp: Option<f64>,
+        scholar_id: Option<i64>,
+    ) -> Result<i64> {
+        self.conn.execute(
+            r#"
+            INSERT INTO terms (term, definition, domain, video_id, timestamp, scholar_id, created_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            "#,
+            params![
+                term,
+                definition,
+                domain,
+                video_id,
+                timestamp,
+                scholar_id,
+                Utc::now().to_rfc3339(),
+            ],
+        )?;
+        Ok(self.conn.last_insert_rowid())
+    }
+
+    pub fn get_terms(&self) -> Result<Vec<Term>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, term, definition, domain, video_id, timestamp, scholar_id, created_at FROM terms ORDER BY term"
+        )?;
+        let terms = stmt.query_map([], |row| {
+            Ok(Term {
+                id: row.get(0)?,
+                term: row.get(1)?,
+                definition: row.get(2)?,
+                domain: row.get(3)?,
+                video_id: row.get(4)?,
+                timestamp: row.get(5)?,
+                scholar_id: row.get(6)?,
+                created_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(7)?)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now()),
+            })
+        })?.collect::<Result<Vec<_>, _>>()?;
+        Ok(terms)
+    }
+
+    pub fn find_term(&self, term: &str) -> Result<Option<Term>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, term, definition, domain, video_id, timestamp, scholar_id, created_at FROM terms WHERE term = ?1"
+        )?;
+        let mut rows = stmt.query(params![term])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(Term {
+                id: row.get(0)?,
+                term: row.get(1)?,
+                definition: row.get(2)?,
+                domain: row.get(3)?,
+                video_id: row.get(4)?,
+                timestamp: row.get(5)?,
+                scholar_id: row.get(6)?,
+                created_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(7)?)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now()),
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    // --- Evidence ---
+
+    pub fn add_evidence(
+        &self,
+        video_id: &str,
+        evidence_type: EvidenceType,
+        description: &str,
+        location_id: Option<i64>,
+        era_id: Option<i64>,
+        timestamp: Option<f64>,
+        source_id: Option<i64>,
+    ) -> Result<i64> {
+        self.conn.execute(
+            r#"
+            INSERT INTO evidence (video_id, evidence_type, description, location_id, era_id, timestamp, source_id, created_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            "#,
+            params![
+                video_id,
+                evidence_type.as_str(),
+                description,
+                location_id,
+                era_id,
+                timestamp,
+                source_id,
+                Utc::now().to_rfc3339(),
+            ],
+        )?;
+        Ok(self.conn.last_insert_rowid())
+    }
+
+    pub fn get_evidence_for_video(&self, video_id: &str) -> Result<Vec<Evidence>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, video_id, evidence_type, description, location_id, era_id, timestamp, source_id, created_at
+             FROM evidence WHERE video_id = ?1 ORDER BY timestamp"
+        )?;
+        let evidence = stmt.query_map(params![video_id], |row| {
+            Ok(Evidence {
+                id: row.get(0)?,
+                video_id: row.get(1)?,
+                evidence_type: EvidenceType::from_str(&row.get::<_, String>(2)?).unwrap_or(EvidenceType::Archaeological),
+                description: row.get(3)?,
+                location_id: row.get(4)?,
+                era_id: row.get(5)?,
+                timestamp: row.get(6)?,
+                source_id: row.get(7)?,
+                created_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(8)?)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now()),
+            })
+        })?.collect::<Result<Vec<_>, _>>()?;
+        Ok(evidence)
+    }
+
+    pub fn link_claim_evidence(&self, claim_id: i64, evidence_id: i64, relationship: Option<&str>) -> Result<()> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO claim_evidence (claim_id, evidence_id, relationship) VALUES (?1, ?2, ?3)",
+            params![claim_id, evidence_id, relationship],
+        )?;
+        Ok(())
+    }
+
+    // --- Quotes ---
+
+    pub fn add_quote(
+        &self,
+        video_id: &str,
+        text: &str,
+        speaker: Option<&str>,
+        scholar_id: Option<i64>,
+        timestamp: Option<f64>,
+        context: Option<&str>,
+    ) -> Result<i64> {
+        self.conn.execute(
+            r#"
+            INSERT INTO quotes (video_id, text, speaker, scholar_id, timestamp, context, created_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            "#,
+            params![
+                video_id,
+                text,
+                speaker,
+                scholar_id,
+                timestamp,
+                context,
+                Utc::now().to_rfc3339(),
+            ],
+        )?;
+        Ok(self.conn.last_insert_rowid())
+    }
+
+    pub fn get_quotes_for_video(&self, video_id: &str) -> Result<Vec<Quote>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, video_id, text, speaker, scholar_id, timestamp, context, created_at
+             FROM quotes WHERE video_id = ?1 ORDER BY timestamp"
+        )?;
+        let quotes = stmt.query_map(params![video_id], |row| {
+            Ok(Quote {
+                id: row.get(0)?,
+                video_id: row.get(1)?,
+                text: row.get(2)?,
+                speaker: row.get(3)?,
+                scholar_id: row.get(4)?,
+                timestamp: row.get(5)?,
+                context: row.get(6)?,
+                created_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(7)?)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now()),
+            })
+        })?.collect::<Result<Vec<_>, _>>()?;
+        Ok(quotes)
+    }
+
+    // --- Entity counts for stats ---
+
+    pub fn get_expanded_stats(&self) -> Result<(i64, i64, i64, i64, i64, i64)> {
+        let sources: i64 = self.conn.query_row("SELECT COUNT(*) FROM sources", [], |row| row.get(0))?;
+        let scholars: i64 = self.conn.query_row("SELECT COUNT(*) FROM scholars", [], |row| row.get(0))?;
+        let visuals: i64 = self.conn.query_row("SELECT COUNT(*) FROM visuals", [], |row| row.get(0))?;
+        let terms: i64 = self.conn.query_row("SELECT COUNT(*) FROM terms", [], |row| row.get(0))?;
+        let evidence: i64 = self.conn.query_row("SELECT COUNT(*) FROM evidence", [], |row| row.get(0))?;
+        let quotes: i64 = self.conn.query_row("SELECT COUNT(*) FROM quotes", [], |row| row.get(0))?;
+        Ok((sources, scholars, visuals, terms, evidence, quotes))
+    }
+
+    // --- Get all entities for API ---
+
+    pub fn get_all_visuals(&self) -> Result<Vec<Visual>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, video_id, timestamp, visual_type, description, significance, location_id, era_id, created_at
+             FROM visuals ORDER BY created_at DESC"
+        )?;
+        let visuals = stmt.query_map([], |row| {
+            let vtype_str: String = row.get(3)?;
+            Ok(Visual {
+                id: row.get(0)?,
+                video_id: row.get(1)?,
+                timestamp: row.get(2)?,
+                visual_type: VisualType::from_str(&vtype_str).unwrap_or(VisualType::Photo),
+                description: row.get(4)?,
+                significance: row.get(5)?,
+                location_id: row.get(6)?,
+                era_id: row.get(7)?,
+                created_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(8)?)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now()),
+            })
+        })?.collect::<Result<Vec<_>, _>>()?;
+        Ok(visuals)
+    }
+
+    pub fn get_all_evidence(&self) -> Result<Vec<Evidence>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, video_id, evidence_type, description, location_id, era_id, timestamp, source_id, created_at
+             FROM evidence ORDER BY created_at DESC"
+        )?;
+        let evidence = stmt.query_map([], |row| {
+            let etype_str: String = row.get(2)?;
+            Ok(Evidence {
+                id: row.get(0)?,
+                video_id: row.get(1)?,
+                evidence_type: EvidenceType::from_str(&etype_str).unwrap_or(EvidenceType::Historical),
+                description: row.get(3)?,
+                location_id: row.get(4)?,
+                era_id: row.get(5)?,
+                timestamp: row.get(6)?,
+                source_id: row.get(7)?,
+                created_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(8)?)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now()),
+            })
+        })?.collect::<Result<Vec<_>, _>>()?;
+        Ok(evidence)
+    }
+
+    pub fn get_all_quotes(&self) -> Result<Vec<Quote>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, video_id, text, speaker, scholar_id, timestamp, context, created_at
+             FROM quotes ORDER BY created_at DESC"
+        )?;
+        let quotes = stmt.query_map([], |row| {
+            Ok(Quote {
+                id: row.get(0)?,
+                video_id: row.get(1)?,
+                text: row.get(2)?,
+                speaker: row.get(3)?,
+                scholar_id: row.get(4)?,
+                timestamp: row.get(5)?,
+                context: row.get(6)?,
+                created_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(7)?)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now()),
+            })
+        })?.collect::<Result<Vec<_>, _>>()?;
+        Ok(quotes)
     }
 }
 

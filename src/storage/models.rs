@@ -909,3 +909,269 @@ pub struct AIProcessingQueue {
     pub error_message: Option<String>,        // If processing failed
     pub claims_extracted: i32,                // Count of claims added
 }
+
+// Phase 12: Expanded Knowledge Entities
+
+// 12.1 Sources (books, papers, documentaries)
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SourceType {
+    Book,
+    Paper,
+    Documentary,
+    Article,
+    Lecture,
+    Website,
+}
+
+impl SourceType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SourceType::Book => "book",
+            SourceType::Paper => "paper",
+            SourceType::Documentary => "documentary",
+            SourceType::Article => "article",
+            SourceType::Lecture => "lecture",
+            SourceType::Website => "website",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "book" => Some(SourceType::Book),
+            "paper" | "journal" => Some(SourceType::Paper),
+            "documentary" | "doc" | "film" => Some(SourceType::Documentary),
+            "article" => Some(SourceType::Article),
+            "lecture" => Some(SourceType::Lecture),
+            "website" | "web" | "url" => Some(SourceType::Website),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Source {
+    pub id: i64,
+    pub title: String,
+    pub author: Option<String>,
+    pub source_type: SourceType,
+    pub year: Option<i32>,
+    pub url: Option<String>,
+    pub notes: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VideoSource {
+    pub video_id: String,
+    pub source_id: i64,
+    pub timestamp: Option<f64>,
+    pub context: Option<String>,
+}
+
+// 12.2 Scholars (people/thinkers mentioned)
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Scholar {
+    pub id: i64,
+    pub name: String,
+    pub field: Option<String>,
+    pub era: Option<String>,
+    pub contribution: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VideoScholar {
+    pub video_id: String,
+    pub scholar_id: i64,
+    pub timestamp: Option<f64>,
+    pub context: Option<String>,
+}
+
+// 12.3 Visuals (images, diagrams, artifacts described)
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum VisualType {
+    Painting,
+    Map,
+    Diagram,
+    Artifact,
+    Chart,
+    Photo,
+    Skeleton,
+    Symbol,
+    Architecture,
+    Inscription,
+}
+
+impl VisualType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            VisualType::Painting => "painting",
+            VisualType::Map => "map",
+            VisualType::Diagram => "diagram",
+            VisualType::Artifact => "artifact",
+            VisualType::Chart => "chart",
+            VisualType::Photo => "photo",
+            VisualType::Skeleton => "skeleton",
+            VisualType::Symbol => "symbol",
+            VisualType::Architecture => "architecture",
+            VisualType::Inscription => "inscription",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "painting" | "cave_painting" => Some(VisualType::Painting),
+            "map" => Some(VisualType::Map),
+            "diagram" => Some(VisualType::Diagram),
+            "artifact" | "object" => Some(VisualType::Artifact),
+            "chart" | "graph" => Some(VisualType::Chart),
+            "photo" | "photograph" | "image" => Some(VisualType::Photo),
+            "skeleton" | "bones" | "remains" => Some(VisualType::Skeleton),
+            "symbol" | "glyph" => Some(VisualType::Symbol),
+            "architecture" | "building" | "structure" => Some(VisualType::Architecture),
+            "inscription" | "text" | "writing" => Some(VisualType::Inscription),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Visual {
+    pub id: i64,
+    pub video_id: String,
+    pub timestamp: f64,
+    pub visual_type: VisualType,
+    pub description: String,
+    pub significance: Option<String>,
+    pub location_id: Option<i64>,
+    pub era_id: Option<i64>,
+    pub created_at: DateTime<Utc>,
+}
+
+// 12.4 Terms (definitions and concepts)
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Term {
+    pub id: i64,
+    pub term: String,
+    pub definition: String,
+    pub domain: Option<String>,
+    pub video_id: Option<String>,
+    pub timestamp: Option<f64>,
+    pub scholar_id: Option<i64>,
+    pub created_at: DateTime<Utc>,
+}
+
+// 12.5 Evidence (specific evidence cited)
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum EvidenceType {
+    Archaeological,
+    Genetic,
+    Textual,
+    Anthropological,
+    Linguistic,
+    Artistic,
+    Scientific,
+    Historical,
+}
+
+impl EvidenceType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            EvidenceType::Archaeological => "archaeological",
+            EvidenceType::Genetic => "genetic",
+            EvidenceType::Textual => "textual",
+            EvidenceType::Anthropological => "anthropological",
+            EvidenceType::Linguistic => "linguistic",
+            EvidenceType::Artistic => "artistic",
+            EvidenceType::Scientific => "scientific",
+            EvidenceType::Historical => "historical",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "archaeological" | "archaeology" => Some(EvidenceType::Archaeological),
+            "genetic" | "dna" => Some(EvidenceType::Genetic),
+            "textual" | "text" | "written" => Some(EvidenceType::Textual),
+            "anthropological" | "anthropology" => Some(EvidenceType::Anthropological),
+            "linguistic" | "language" => Some(EvidenceType::Linguistic),
+            "artistic" | "art" => Some(EvidenceType::Artistic),
+            "scientific" | "science" => Some(EvidenceType::Scientific),
+            "historical" | "history" => Some(EvidenceType::Historical),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Evidence {
+    pub id: i64,
+    pub video_id: String,
+    pub evidence_type: EvidenceType,
+    pub description: String,
+    pub location_id: Option<i64>,
+    pub era_id: Option<i64>,
+    pub timestamp: Option<f64>,
+    pub source_id: Option<i64>,
+    pub created_at: DateTime<Utc>,
+}
+
+// 12.6 Quotes (notable statements)
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Quote {
+    pub id: i64,
+    pub video_id: String,
+    pub text: String,
+    pub speaker: Option<String>,
+    pub scholar_id: Option<i64>,
+    pub timestamp: Option<f64>,
+    pub context: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+// Composite types for rich display
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SourceWithVideos {
+    pub source: Source,
+    pub videos: Vec<(Video, Option<f64>, Option<String>)>, // video, timestamp, context
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScholarWithReferences {
+    pub scholar: Scholar,
+    pub videos: Vec<(Video, Option<f64>, Option<String>)>,
+    pub claims: Vec<Claim>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VisualWithContext {
+    pub visual: Visual,
+    pub video_title: String,
+    pub location_name: Option<String>,
+    pub era_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TermWithUsages {
+    pub term: Term,
+    pub scholar_name: Option<String>,
+    pub video_title: Option<String>,
+    pub claims: Vec<Claim>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvidenceWithContext {
+    pub evidence: Evidence,
+    pub video_title: String,
+    pub location_name: Option<String>,
+    pub era_name: Option<String>,
+    pub source_title: Option<String>,
+    pub claims: Vec<Claim>,
+}

@@ -8,13 +8,13 @@ COPY Cargo.toml Cargo.lock ./
 
 # Create dummy src to cache dependencies
 RUN mkdir src && echo "fn main() {}" > src/main.rs
-RUN cargo build --release
+RUN CARGO_BUILD_JOBS=2 cargo build --release
 RUN rm -rf src
 
 # Copy actual source and static files, then rebuild
 COPY src ./src
 COPY static ./static
-RUN touch src/main.rs && cargo build --release
+RUN touch src/main.rs && CARGO_BUILD_JOBS=2 cargo build --release
 
 # Stage 2: Runtime image
 FROM debian:bookworm-slim
